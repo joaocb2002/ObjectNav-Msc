@@ -25,3 +25,14 @@ def compute_iou(box1, box2):
     iou = inter_area / union_area if union_area > 0 else 0
 
     return iou
+
+def bin_index(scale, bin_vector):
+    """
+    Computes the bin index for a given scale and bin vector.
+    """
+    bin_index = 0
+    for i in range(len(bin_vector)):
+        if scale < bin_vector[i]:
+            break
+        bin_index += 1
+    return bin_index
