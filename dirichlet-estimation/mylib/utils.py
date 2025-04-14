@@ -32,7 +32,7 @@ def bin_index(scale, bin_vector):
     """
     bin_index = 0
     for i in range(len(bin_vector)):
-        if scale < bin_vector[i]:
+        if scale <= bin_vector[i] or scale > bin_vector[-1]:
             break
         bin_index += 1
     return bin_index
