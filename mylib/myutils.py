@@ -79,8 +79,8 @@ def add_axis_to_map(image, arrow_length_ratio=0.075):
     # Define text offsets
 
     # Draw labels
-    cv2.putText(image_copy, 'X', (int(x_end[0] + arrow_len / 3), int(x_end[1] + arrow_len / 5)), font, font_scale, (17, 17, 132), thickness)
-    cv2.putText(image_copy, 'Z', (int(z_end[0] + arrow_len / 5), int(z_end[1] + arrow_len / 3)), font, font_scale, (17, 17, 132), thickness)
+    cv2.putText(image_copy, 'Z', (int(x_end[0] + arrow_len / 3), int(x_end[1] + arrow_len / 5)), font, font_scale, (17, 17, 132), thickness)
+    cv2.putText(image_copy, 'X', (int(z_end[0] + arrow_len / 5), int(z_end[1] + arrow_len / 3)), font, font_scale, (17, 17, 132), thickness)
 
     return image_copy
 
@@ -118,37 +118,3 @@ def plot_two_maps(topdown_map: np.ndarray, occ_grid_map: np.ndarray):
 
     plt.tight_layout()
     plt.show()
-
-
-
-
-
-
-# Function to display the RGB sensor data, depth sensor data, top-down map, and occupancy grid
-def display_sample(rgb_obs, depth_obs, top_down_map, occ_grid):
-    # Visualize the observations: RGB
-    rgb_img = Image.fromarray(rgb_obs, mode="RGBA")
-    arr = [rgb_img]
-    titles = ["rgb"]
-
-    # Visualize the observations: Depth
-    depth_img = Image.fromarray((depth_obs / 10 * 255).astype(np.uint8), mode="L")
-    arr.append(depth_img)
-    titles.append("depth")
-
-    # Visualize the observations: Top-down map
-    arr.append(top_down_map)
-    titles.append("top-down map")
-
-    # Visualize the observations: Occupancy grid
-    arr.append(occ_grid)
-    titles.append("occupancy grid")
-
-    # Display the images
-    plt.figure(figsize=(12, 8))
-    for i, data in enumerate(arr):
-        ax = plt.subplot(1, 4, i + 1)
-        ax.axis("off")
-        ax.set_title(titles[i])
-        plt.imshow(data)
-    plt.show(block=False)
