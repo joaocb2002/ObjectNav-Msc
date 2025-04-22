@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 
-def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_pos, agent_rot, agent_radius, pathfinder):
+def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
     """
     Displays a 4-panel visualization of the agent's simulation state, including:
 
@@ -13,9 +13,6 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_pos, 
     2. Depth observation from the agent's depth sensor.
     3. Top-down map of the environment with agent position and orientation.
     4. Occupancy grid map with agent position and orientation.
-
-    Agent's position is projected into map coordinates using a pathfinder. 
-    Orientation is visualized using a direction arrow based on the agent's rotation (quaternion).
 
     Args:
         rgb_obs (np.ndarray): RGBA image from the agent's RGB sensor.
@@ -41,17 +38,19 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_pos, 
     ax2.set_title('depth obs')
     ax2.axis('off')
 
+    # Compute the agent position and radius in the top-down map and occupancy grid
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
+    topdown_radius, occ_grid_radius = agent_radius_tpl
+
     # Top-down map
     ax3.imshow(topdown_map)
-    ax3.set_title('topdown map')
+    ax3.set_title('topdown map (Z, X): [{:.0f}, {:.0f}]'.format(map_x, map_y))
     ax3.axis('off')
-    topdown_resolution = [topdown_map.shape[1], topdown_map.shape[0]]
 
     # Occupancy grid
     ax4.imshow(occ_grid_map)
-    ax4.set_title('occupancy grid')
+    ax4.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
     ax4.axis('off')
-    occ_grid_resolution = [occ_grid_map.shape[1], occ_grid_map.shape[0]]
 
     # Black grid lines
     rows, cols = occ_grid_map.shape[:2]
@@ -60,25 +59,11 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_pos, 
     for j in range(cols):
         ax4.axvline(x=j-0.5, color='black', linewidth=0.5)
 
-    # Compute the agent position in the top-down map and occupancy grid
-    map_x, map_y = maps.to_grid(agent_pos[0], agent_pos[2], topdown_resolution, pathfinder=pathfinder)
-    grid_x, grid_y = maps.to_grid(agent_pos[0], agent_pos[2], occ_grid_resolution, pathfinder=pathfinder)
-
-    # Compute agent yaw from quarternion
-    r = R.from_quat([agent_rot.x, agent_rot.y, agent_rot.z, agent_rot.w])
-    yaw = r.as_euler("xyz", degrees=False)[2]
-
-    # Compute agent radius in both maps
-    min_bounds, max_bounds = pathfinder.get_bounds()
-    x_dim = max_bounds[0] - min_bounds[0]
-    topdown_radius = int(agent_radius / x_dim * topdown_resolution[0])
-    occ_grid_radius = int(agent_radius / x_dim * occ_grid_resolution[0])
-
     # Draw the agent position and orientation on the top-down map and occupancy grid
-    ax3.add_patch(plt.Circle((map_x, map_y), topdown_radius, color="red", fill=True))
-    #ax3.add_patch(plt.Arrow(map_x, map_y, topdown_radius * np.cos(yaw), topdown_radius * np.sin(yaw), width=topdown_radius / 2, color="blue"))
-    ax4.add_patch(plt.Circle((grid_x, grid_y), occ_grid_radius, color="red", fill=True))
-    #ax4.add_patch(plt.Arrow(grid_x, grid_y, occ_grid_radius * np.cos(yaw), occ_grid_radius * np.sin(yaw), width=occ_grid_radius / 2, color="blue"))
+    ax3.add_patch(plt.Circle((map_y, map_x), topdown_radius*2/3, color="red", fill=True))
+    ax3.add_patch(plt.Arrow(map_y, map_x, topdown_radius * np.sin(agent_yaw), -topdown_radius * np.cos(agent_yaw), width=topdown_radius / 2, color="black"))
+    ax4.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius*2/3, color="red", fill=True))
+    ax4.add_patch(plt.Arrow(grid_y, grid_x, occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
 
     plt.tight_layout()
     plt.show()
