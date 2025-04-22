@@ -4,6 +4,8 @@ from habitat.utils.visualizations import maps
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
+import math
+import json
 
 def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
     """
@@ -67,3 +69,27 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_posit
 
     plt.tight_layout()
     plt.show()
+
+
+def save_rgb_camera_intrinsics(sensor_spec):
+    height, width = sensor_spec.resolution
+    hfov = float(sensor_spec.hfov)  # Convert to float
+
+    fx = (width / 2.0) / math.tan(math.radians(hfov) / 2.0)
+    fy = fx  # assuming square pixels
+    cx = width / 2.0
+    cy = height / 2.0
+
+    intrinsics = {
+        "fx": fx,
+        "fy": fy,
+        "cx": cx,
+        "cy": cy,
+        "width": width,
+        "height": height,
+        "hfov": hfov
+    }
+
+    intrinsics_file = "camera_intrinsics.json"
+    with open(intrinsics_file, "w") as f:
+        json.dump(intrinsics, f, indent=4)
