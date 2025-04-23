@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import cv2
 from io import BytesIO
+import math
+import quaternion
 
 def map_to_rgb(image):
     """
@@ -118,3 +120,31 @@ def plot_two_maps(topdown_map: np.ndarray, occ_grid_map: np.ndarray):
 
     plt.tight_layout()
     plt.show()
+
+def quaternion_to_yaw(q):
+    """
+    Convert a quaternion.quaternion object to yaw angle in degrees.
+    Assumes Y is the up axis (rotation around Y).
+    """
+    w = q.w
+    x = q.x
+    y = q.y
+    z = q.z
+    # Yaw (around Y-axis)
+    siny_cosp = 2 * (w * y + x * z)
+    cosy_cosp = 1 - 2 * (y * y + z * z)
+    yaw_rad = math.atan2(siny_cosp, cosy_cosp)
+    return math.degrees(yaw_rad)
+
+def yaw_to_quaternion(yaw_deg):
+    """
+    Convert a yaw angle in degrees to a quaternion.quaternion,
+    rotating around the Y axis.
+    """
+    yaw_rad = math.radians(yaw_deg)
+    half_yaw = yaw_rad / 2
+    w = math.cos(half_yaw)
+    x = 0
+    y = math.sin(half_yaw)
+    z = 0
+    return quaternion.quaternion(w, x, y, z)

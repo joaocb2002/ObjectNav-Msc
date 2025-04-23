@@ -21,10 +21,9 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_posit
         depth_obs (np.ndarray): Depth image as a 2D array of float distances (in meters).
         topdown_map (np.ndarray): Rendered top-down map image.
         occ_grid_map (np.ndarray): Rendered occupancy grid map image.
-        agent_pos (tuple): Agent's 3D position in the environment (x, y, z).
-        agent_rot (tuple): Agent's orientation as a quaternion (x, y, z, w).
-        agent_radius (float): Agent's radius in world units (for visualization).
-        pathfinder (object): An object used to convert world coordinates to grid coordinates.
+        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_yaw (float): Agent's yaw angle in degrees.
     """
     fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4, figsize=(16, 4))
 
@@ -62,10 +61,11 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_posit
         ax4.axvline(x=j-0.5, color='black', linewidth=0.5)
 
     # Draw the agent position and orientation on the top-down map and occupancy grid
+    agent_yaw = math.radians(agent_yaw)
     ax3.add_patch(plt.Circle((map_y, map_x), topdown_radius*2/3, color="red", fill=True))
-    ax3.add_patch(plt.Arrow(map_y, map_x, topdown_radius * np.sin(agent_yaw), -topdown_radius * np.cos(agent_yaw), width=topdown_radius / 2, color="black"))
+    ax3.add_patch(plt.Arrow(map_y, map_x, -topdown_radius * np.sin(agent_yaw), -topdown_radius * np.cos(agent_yaw), width=topdown_radius / 2, color="black"))
     ax4.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius*2/3, color="red", fill=True))
-    ax4.add_patch(plt.Arrow(grid_y, grid_x, occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
+    ax4.add_patch(plt.Arrow(grid_y, grid_x, -occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
 
     plt.tight_layout()
     plt.show()
@@ -73,11 +73,11 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_posit
 
 def save_rgb_camera_intrinsics(sensor_spec):
     height, width = sensor_spec.resolution
-    hfov = float(sensor_spec.hfov)  # Convert to float
+    hfov = float(sensor_spec.hfov)  # Convert to float, default is 90 degrees
 
     fx = (width / 2.0) / math.tan(math.radians(hfov) / 2.0)
     fy = fx  # assuming square pixels
-    cx = width / 2.0
+    cx = width / 2.0 # in habitat-sim, the camera is centered
     cy = height / 2.0
 
     intrinsics = {
@@ -93,3 +93,89 @@ def save_rgb_camera_intrinsics(sensor_spec):
     intrinsics_file = "camera_intrinsics.json"
     with open(intrinsics_file, "w") as f:
         json.dump(intrinsics, f, indent=4)
+
+
+### THESE ARE FOR THE BASELINE ALGORITHM ###
+def is_position_valid(position, grid_occ_positions):
+    """
+    Check if the position is valid based on the occupancy grid.
+
+    Args:
+        position (tuple): The position to check.
+        grid_occ_positions (list): List of valid positions in the grid.
+
+    Returns:
+        bool: True if the position is valid, False otherwise.
+    """
+    # Check if the position is within bounds and not occupied
+    if position in grid_occ_positions:
+        return True
+
+    return False
+
+def is_action_valid(action, agent_pos, agent_rot, grid_occ_positions):
+    """
+    Check if the action is valid based on the agent's position, rotation, and occupancy grid.
+
+    Args:
+        action (str): The action to check.
+        agent_pos (tuple): The agent's current position in the environment.
+        agent_rot (float): The agent's current rotation in the environment.
+        grid_occ_positions (list): List of occupied positions in the grid.
+
+    Returns:
+        bool: True if the action is valid, False otherwise.
+    """
+
+    # If action is 'turn_left' or 'turn_right', it's always valid
+    if action in ["turn_left", "turn_right"]:
+        return True
+    
+    # If action is 'move_forward' or 'move_backward', check the occupancy grid
+    if (action == "move_forward" and agent_rot == 0) or (action == "move_backward" and agent_rot == 180):
+        return is_position_valid([agent_pos[0]-1, agent_pos[1]], grid_occ_positions)
+    elif (action == "move_forward" and agent_rot == 180) or (action == "move_backward" and agent_rot == 0):
+        return is_position_valid([agent_pos[0]+1, agent_pos[1]], grid_occ_positions)
+    elif (action == "move_forward" and agent_rot == 90) or (action == "move_backward" and agent_rot == 270):
+        return is_position_valid([agent_pos[0], agent_pos[1]+1], grid_occ_positions)
+    elif (action == "move_forward" and agent_rot == 270) or (action == "move_backward" and agent_rot == 90):
+        return is_position_valid([agent_pos[0], agent_pos[1]-1], grid_occ_positions)
+    
+    return False
+
+def perform_action(action, agent_pos, agent_rot):
+    """
+    Perform the action and update the agent's position and rotation.
+
+    Args:
+        action (str): The action to perform.
+        agent_pos (tuple): The agent's current position in the environment grid.
+        agent_rot (float): The agent's current rotation in the environment.
+
+    Returns:
+        tuple: Updated position and rotation of the agent.
+    """
+    if action == "move_forward":
+        if agent_rot == 0:
+            return [agent_pos[0]-1, agent_pos[1]], agent_rot
+        elif agent_rot == 180:
+            return [agent_pos[0]+1, agent_pos[1]], agent_rot
+        elif agent_rot == 90:
+            return [agent_pos[0], agent_pos[1]+1], agent_rot
+        elif agent_rot == 270:
+            return [agent_pos[0], agent_pos[1]-1], agent_rot
+    elif action == "move_backward":
+        if agent_rot == 0:
+            return [agent_pos[0]+1, agent_pos[1]], agent_rot
+        elif agent_rot == 180:
+            return [agent_pos[0]-1, agent_pos[1]], agent_rot
+        elif agent_rot == 90:
+            return [agent_pos[0], agent_pos[1]-1], agent_rot
+        elif agent_rot == 270:
+            return [agent_pos[0], agent_pos[1]+1], agent_rot
+    elif action == "turn_left":
+        return agent_pos, (agent_rot + 90) % 360
+    elif action == "turn_right":
+        return agent_pos, (agent_rot - 90) % 360
+
+    return None, None
