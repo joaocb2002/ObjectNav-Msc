@@ -1,0 +1,14 @@
+[
+    {
+        "scene": "FloorPlan215_physics",
+        "target_object": "tv",
+        "target_object_id": 62,
+        "target_object_location": [5.640192985534668, 0.9984869956970215, 6.950367450714111]
+    },
+    {
+        "scene": "living_room",
+        "target_object": "remote_control",
+        "target_object_id": 84,
+        "target_object_location": [5.640192985534668, 0.9984869956970215, 6.950367450714111]
+    }
+]

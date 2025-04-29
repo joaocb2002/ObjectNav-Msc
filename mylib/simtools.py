@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import math
 import json
+import cv2
 
 def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
     """
@@ -30,13 +31,13 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_posit
     # Visualize the observations: RGB
     rgb_img = Image.fromarray(rgb_obs, mode="RGBA")
     ax1.imshow(rgb_img)
-    ax1.set_title('rgb obs')
+    ax1.set_title('rgb')
     ax1.axis('off')
 
     # Visualize the observations: Depth
     depth_img = Image.fromarray((depth_obs / 10 * 255).astype(np.uint8), mode="L")
     ax2.imshow(depth_img)
-    ax2.set_title('depth obs')
+    ax2.set_title('depth')
     ax2.axis('off')
 
     # Compute the agent position and radius in the top-down map and occupancy grid
@@ -70,8 +71,82 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_posit
     plt.tight_layout()
     plt.show()
 
+def display_sim_observations(rgb_obs, depth_obs):
+    """
+    Displays the RGB and depth observations from the simulation.
+
+    Args:
+        rgb_obs (np.ndarray): RGBA image from the agent's RGB sensor.
+        depth_obs (np.ndarray): Depth image as a 2D array of float distances (in meters).
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 5))
+
+    # Visualize the observations: RGB
+    rgb_img = Image.fromarray(rgb_obs, mode="RGBA")
+    ax1.imshow(rgb_img)
+    ax1.set_title('rgb')
+    ax1.axis('off')
+
+    # Visualize the observations: Depth
+    depth_img = Image.fromarray((depth_obs / 10 * 255).astype(np.uint8), mode="L")
+    ax2.imshow(depth_img)
+    ax2.set_title('depth')
+    ax2.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+def display_topdown_maps(topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
+    """
+    Displays the top-down map and occupancy grid map with the agent's position and orientation.
+
+    Args:
+        topdown_map (np.ndarray): Rendered top-down map image.
+        occ_grid_map (np.ndarray): Rendered occupancy grid map image.
+        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_yaw (float): Agent's yaw angle in degrees.
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6, 3))
+
+    # Compute the agent position and radius in the top-down map and occupancy grid
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
+    topdown_radius, occ_grid_radius = agent_radius_tpl
+
+    # Top-down map
+    ax1.imshow(topdown_map)
+    ax1.set_title('topdown map (Z, X): [{:.0f}, {:.0f}]'.format(map_x, map_y))
+    ax1.axis('off')
+
+    # Occupancy grid
+    ax2.imshow(occ_grid_map)
+    ax2.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
+    ax2.axis('off')
+
+    # Black grid lines
+    rows, cols = occ_grid_map.shape[:2]
+    for i in range(rows):
+        ax2.axhline(y=i-0.5, color='black', linewidth=0.5)
+    for j in range(cols):
+        ax2.axvline(x=j-0.5, color='black', linewidth=0.5)
+
+    # Draw the agent position and orientation on the top-down map and occupancy grid
+    agent_yaw = math.radians(agent_yaw)
+    ax1.add_patch(plt.Circle((map_y, map_x), topdown_radius*2/3, color="red", fill=True))
+    ax1.add_patch(plt.Arrow(map_y, map_x, -topdown_radius * np.sin(agent_yaw), -topdown_radius * np.cos(agent_yaw), width=topdown_radius / 2, color="black"))
+    ax2.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius*2/3, color="red", fill=True))
+    ax2.add_patch(plt.Arrow(grid_y, grid_x, -occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
+
+    plt.tight_layout()
+    plt.show()
+
 
 def save_rgb_camera_intrinsics(sensor_spec):
+    """
+    Save the RGB camera intrinsics to a JSON file.
+    Args:
+        sensor_spec (habitat_sim.SensorSpec): The sensor specification for the RGB camera.
+    """
     height, width = sensor_spec.resolution
     hfov = float(sensor_spec.hfov)  # Convert to float, default is 90 degrees
 
@@ -94,8 +169,74 @@ def save_rgb_camera_intrinsics(sensor_spec):
     with open(intrinsics_file, "w") as f:
         json.dump(intrinsics, f, indent=4)
 
+def get_class_color(class_id):
+    """
+    Get a random color for the class ID.
+    Args:
+        class_id (int): Class ID.
+    Returns:
+        tuple: RGBA color.
+    """
+    np.random.seed(class_id) 
+    color = np.random.randint(0, 255, size=3).tolist()
+    return (int(color[0]), int(color[1]), int(color[2]), 255)  # RGBA
 
-### THESE ARE FOR THE BASELINE ALGORITHM ###
+def merge_rgb_yolo_outputs(rgb, xyxy, cls, conf, names):
+    """
+    Merge YOLO outputs with RGB image. In place modification of the RGB image.
+    Args:
+        rgb (np.ndarray): RGB image.
+        xyxy (np.ndarray): Bounding box coordinates.
+        cls (np.ndarray): Class IDs.
+        conf (np.ndarray): Confidence scores.
+        names (list): List of class names.
+    """
+    for i in range(len(xyxy)):
+        # Extract data
+        box = xyxy[i].astype(int)
+        class_id = int(cls[i][0])
+        confidence = conf[i][0]
+        label = f"{names[class_id]} {confidence:.2f}"
+
+        # Get color for the class
+        color = get_class_color(class_id)
+
+        # Draw rectangle
+        cv2.rectangle(rgb, (box[0], box[1]), (box[2], box[3]), color, 2)
+
+        # Put label background
+        (text_width, text_height), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1, 1)
+        cv2.rectangle(rgb, 
+                    (box[0], box[1] - text_height - baseline), 
+                    (box[0] + text_width, box[1]), 
+                    color, -1)
+
+        # Text color
+        text_color = (255, 255, 255, 255) if sum(color) < 382 else (0, 0, 0, 255)
+
+        # Put label text
+        cv2.putText(rgb, label, (box[0], box[1] - baseline), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, text_color, 1)
+
+def was_object_found(object_id, found_objects_ids, confidences, threshold=0.5):
+    """
+    Check if an object was found based on its ID and confidence score.
+    Args:
+        object_id (int): The ID of the object to check.
+        found_objects_ids (list): List of found object IDs.
+        confidences (list): List of confidence scores for the found objects.
+        threshold (float): Confidence threshold for considering an object as found.
+    """
+    for i in range(len(found_objects_ids)):
+        class_id = int(found_objects_ids[i][0])
+        confidence = confidences[i][0]
+        if class_id == object_id and confidence >= threshold:
+            return True
+
+    return False
+
+
+### THESE ARE FOR THE RANDOM ALGORITHM ###
 def is_position_valid(position, grid_occ_positions):
     """
     Check if the position is valid based on the occupancy grid.
@@ -136,9 +277,9 @@ def is_action_valid(action, agent_pos, agent_rot, grid_occ_positions):
         return is_position_valid([agent_pos[0]-1, agent_pos[1]], grid_occ_positions)
     elif (action == "move_forward" and agent_rot == 180) or (action == "move_backward" and agent_rot == 0):
         return is_position_valid([agent_pos[0]+1, agent_pos[1]], grid_occ_positions)
-    elif (action == "move_forward" and agent_rot == 90) or (action == "move_backward" and agent_rot == 270):
-        return is_position_valid([agent_pos[0], agent_pos[1]+1], grid_occ_positions)
     elif (action == "move_forward" and agent_rot == 270) or (action == "move_backward" and agent_rot == 90):
+        return is_position_valid([agent_pos[0], agent_pos[1]+1], grid_occ_positions)
+    elif (action == "move_forward" and agent_rot == 90) or (action == "move_backward" and agent_rot == 270):
         return is_position_valid([agent_pos[0], agent_pos[1]-1], grid_occ_positions)
     
     return False
@@ -160,18 +301,18 @@ def perform_action(action, agent_pos, agent_rot):
             return [agent_pos[0]-1, agent_pos[1]], agent_rot
         elif agent_rot == 180:
             return [agent_pos[0]+1, agent_pos[1]], agent_rot
-        elif agent_rot == 90:
-            return [agent_pos[0], agent_pos[1]+1], agent_rot
         elif agent_rot == 270:
+            return [agent_pos[0], agent_pos[1]+1], agent_rot
+        elif agent_rot == 90:
             return [agent_pos[0], agent_pos[1]-1], agent_rot
     elif action == "move_backward":
         if agent_rot == 0:
             return [agent_pos[0]+1, agent_pos[1]], agent_rot
         elif agent_rot == 180:
             return [agent_pos[0]-1, agent_pos[1]], agent_rot
-        elif agent_rot == 90:
-            return [agent_pos[0], agent_pos[1]-1], agent_rot
         elif agent_rot == 270:
+            return [agent_pos[0], agent_pos[1]-1], agent_rot
+        elif agent_rot == 90:
             return [agent_pos[0], agent_pos[1]+1], agent_rot
     elif action == "turn_left":
         return agent_pos, (agent_rot + 90) % 360

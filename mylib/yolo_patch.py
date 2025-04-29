@@ -5,6 +5,8 @@ import torch
 from ultralytics.utils.ops import xywh2xyxy, LOGGER, nms_rotated
 import ultralytics.engine.results as results_mod
 from ultralytics.models.yolo.detect.predict import DetectionPredictor
+from ultralytics.utils.ops import scale_boxes, convert_torch2numpy_batch
+
 
 # Patch the Results.Boxes class to handle extended box data
 OriginalBoxes = results_mod.Boxes
@@ -148,12 +150,15 @@ def patched_postprocess(self, preds, img, orig_imgs, **kwargs):
         rotated=self.args.task == "obb",
     )
 
-    if not isinstance(orig_imgs, list):  # Handle single image input
-        orig_imgs = ultralytics.utils.ops.convert_torch2numpy_batch(orig_imgs)
+    if not isinstance(orig_imgs, list):
+        orig_imgs = convert_torch2numpy_batch(orig_imgs)
 
     results = []
     for i, pred in enumerate(preds):
-        boxes = pred  # <-- DO NOT slice to [:, :6]
+        if len(pred) > 0:
+            # Scale boxes from model image size (img[i].shape[1:]) to original image size (orig_imgs[i].shape[:2])
+            pred[:, :4] = scale_boxes(img[i].shape[1:], pred[:, :4], orig_imgs[i].shape[:2])
+        boxes = pred  # includes full class probabilities
         results.append(results_mod.Results(orig_imgs[i], path=None, names=self.model.names, boxes=boxes))
     return results
 
