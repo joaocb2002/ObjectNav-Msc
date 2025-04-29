@@ -218,23 +218,94 @@ def merge_rgb_yolo_outputs(rgb, xyxy, cls, conf, names):
         cv2.putText(rgb, label, (box[0], box[1] - baseline), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, text_color, 1)
 
-def was_object_found(object_id, found_objects_ids, confidences, threshold=0.5):
+def was_object_found(object_id, found_objects_ids, confidences, bboxes, threshold=0.5):
     """
-    Check if an object was found based on its ID and confidence score.
+    Check if an object was found based on its ID and confidence score and return its bounding box.
     Args:
         object_id (int): The ID of the object to check.
         found_objects_ids (list): List of found object IDs.
         confidences (list): List of confidence scores for the found objects.
+        bboxes (list): List of bounding boxes for the found objects.
         threshold (float): Confidence threshold for considering an object as found.
     """
     for i in range(len(found_objects_ids)):
         class_id = int(found_objects_ids[i][0])
         confidence = confidences[i][0]
         if class_id == object_id and confidence >= threshold:
-            return True
+            return True, bboxes[i]
 
-    return False
+    return False, None
 
+def compute_travelled_distance(start_pos, end_pos):
+    """
+    Compute the travelled distance between two positions in 3D space.
+
+    Args:
+        start_pos (list): Starting position [x, y, z].
+        end_pos (list): Ending position [x, y, z].
+
+    Returns:
+        float: The Euclidean distance between the two positions.
+    """
+    return np.linalg.norm(np.array(start_pos) - np.array(end_pos))
+
+def compute_real_world_position(agent_pos, agent_rot, depth_obs, x_cam, y_cam, camera_intrinsics):
+    """
+    Compute the real-world position of an object in the environment based on the agent's position, rotation, and depth and RGB observations.
+
+    Args:
+        agent_pos (list): Agent's position [x, y, z].
+        agent_rot (list): Agent's rotation quaternion [x, y, z, w].
+        depth_obs (float): Depth observation from the agent's depth sensor.
+        x_cam (int): X coordinate of the pixel in the RGB image.
+        y_cam (int): Y coordinate of the pixel in the RGB image.
+        camera_intrinsics (dict): Camera intrinsics containing fx, fy, cx, cy.
+
+    Returns:
+        list: Real-world position [x, y, z] of the object.
+    """
+    # Acess camera intrinsics
+    fx = camera_intrinsics["fx"]
+    fy = camera_intrinsics["fy"]
+    cx = camera_intrinsics["cx"]
+    cy = camera_intrinsics["cy"]
+
+    # Access quartenion
+    q_w = agent_rot.w
+    q_x = agent_rot.x
+    q_y = agent_rot.y
+    q_z = agent_rot.z
+
+    # Compute real-world coordinates in camera coordinate system
+    Z_c = depth_obs
+    X_c = (x_cam - cx) * Z_c / fx
+    Y_c = (y_cam - cy) * Z_c / fy
+    P_c = np.array([X_c, Y_c, Z_c])
+
+    # Compute rotation matrix from quaternion
+    R = np.array([
+        [1 - 2*(q_y**2 + q_z**2),     2*(q_x*q_y - q_z*q_w),     2*(q_x*q_z + q_y*q_w)],
+        [2*(q_x*q_y + q_z*q_w),       1 - 2*(q_x**2 + q_z**2),   2*(q_y*q_z - q_x*q_w)],
+        [2*(q_x*q_z - q_y*q_w),       2*(q_y*q_z + q_x*q_w),     1 - 2*(q_x**2 + q_y**2)]
+    ])
+    
+    # Compute real-world coordinates in world coordinate system
+    P_w = np.dot(R, P_c) + np.array(agent_pos)
+    
+    return P_w
+
+def compute_closeness(real_pos, computed_pos):
+    """
+    Compute the closeness between two positions in 2D space.
+    Args:
+        real_pos (list): Real-world position [x, y, z].
+        computed_pos (list): Computed position [x, y, z].
+    Returns:
+        float: The Euclidean distance between the two positions, using only x and z coordinates.
+    """
+    real_pos_2d = np.array([real_pos[0], real_pos[2]])
+    computed_pos_2d = np.array([computed_pos[0], computed_pos[2]])
+    return np.linalg.norm(real_pos_2d - computed_pos_2d)
 
 ### THESE ARE FOR THE RANDOM ALGORITHM ###
 def is_position_valid(position, grid_occ_positions):
