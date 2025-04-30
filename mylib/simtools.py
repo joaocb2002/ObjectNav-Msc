@@ -70,7 +70,7 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_posit
 
     plt.tight_layout()
     plt.show()
-
+    
 def display_sim_observations(rgb_obs, depth_obs):
     """
     Displays the RGB and depth observations from the simulation.
@@ -140,6 +140,74 @@ def display_topdown_maps(topdown_map, occ_grid_map, agent_positions_tpl, agent_r
     plt.tight_layout()
     plt.show()
 
+def display_topdown_maps_with_target(topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw, target_coords_tpl):
+    """
+    Displays the top-down map and occupancy grid map with the agent's position, orientation, and target position.
+
+    Args:
+        topdown_map (np.ndarray): Rendered top-down map image.
+        occ_grid_map (np.ndarray): Rendered occupancy grid map image.
+        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_yaw (float): Agent's yaw angle in degrees.
+        target_coords_tpl (tuple): Tuple containing the target position in the top-down map and occupancy grid.
+
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6, 3))
+
+    # Compute the agent position and radius in the top-down map and occupancy grid
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
+    topdown_radius, occ_grid_radius = agent_radius_tpl
+    real_target_pos, computed_target_pos = target_coords_tpl
+
+    # Top-down map
+    ax1.imshow(topdown_map)
+    ax1.set_title('topdown map (Z, X): [{:.0f}, {:.0f}]'.format(map_x, map_y))
+    ax1.axis('off')
+
+    # Occupancy grid
+    ax2.imshow(occ_grid_map)
+    ax2.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
+    ax2.axis('off')
+
+    # Black grid lines
+    rows, cols = occ_grid_map.shape[:2]
+    for i in range(rows):
+        ax2.axhline(y=i-0.5, color='black', linewidth=0.5)
+    for j in range(cols):
+        ax2.axvline(x=j-0.5, color='black', linewidth=0.5)
+
+    # Draw the agent position and orientation on the top-down map and occupancy grid
+    agent_yaw = math.radians(agent_yaw)
+    ax1.add_patch(plt.Circle((map_y, map_x), topdown_radius*2/3, color="red", fill=True))
+    ax1.add_patch(plt.Arrow(map_y, map_x, -topdown_radius * np.sin(agent_yaw), -topdown_radius * np.cos(agent_yaw), width=topdown_radius / 2, color="black"))
+    ax2.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius*2/3, color="red", fill=True))
+    ax2.add_patch(plt.Arrow(grid_y, grid_x, -occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
+    
+    # Draw the target position on the top-down map and occupancy grid: diagonal crosses
+    target_pos_map, target_pos_grid = real_target_pos
+    ax1.plot([target_pos_map[1] - topdown_radius*2/3, target_pos_map[1] + topdown_radius*2/3],
+        [target_pos_map[0] + topdown_radius*2/3, target_pos_map[0] - topdown_radius*2/3], color='blue')
+    ax1.plot([target_pos_map[1] - topdown_radius*2/3, target_pos_map[1] + topdown_radius*2/3],
+        [target_pos_map[0] - topdown_radius*2/3, target_pos_map[0] + topdown_radius*2/3], color='blue')
+    ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
+        [target_pos_grid[0] + occ_grid_radius*2/3, target_pos_grid[0] - occ_grid_radius*2/3], color='blue')
+    ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
+        [target_pos_grid[0] - occ_grid_radius*2/3, target_pos_grid[0] + occ_grid_radius*2/3], color='blue')
+
+    target_pos_map, target_pos_grid = computed_target_pos
+    ax1.plot([target_pos_map[1] - topdown_radius*2/3, target_pos_map[1] + topdown_radius*2/3],
+        [target_pos_map[0] + topdown_radius*2/3, target_pos_map[0] - topdown_radius*2/3], color='green')
+    ax1.plot([target_pos_map[1] - topdown_radius*2/3, target_pos_map[1] + topdown_radius*2/3],
+        [target_pos_map[0] - topdown_radius*2/3, target_pos_map[0] + topdown_radius*2/3], color='green')
+    ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
+        [target_pos_grid[0] + occ_grid_radius*2/3, target_pos_grid[0] - occ_grid_radius*2/3], color='green')
+    ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
+        [target_pos_grid[0] - occ_grid_radius*2/3, target_pos_grid[0] + occ_grid_radius*2/3], color='green')
+
+
+    plt.tight_layout()
+    plt.show()
 
 def save_rgb_camera_intrinsics(sensor_spec):
     """
@@ -277,20 +345,16 @@ def compute_real_world_position(agent_pos, agent_rot, depth_obs, x_cam, y_cam, c
     q_z = agent_rot.z
 
     # Compute real-world coordinates in camera coordinate system
-    Z_c = depth_obs
-    X_c = (x_cam - cx) * Z_c / fx
-    Y_c = (y_cam - cy) * Z_c / fy
-    P_c = np.array([X_c, Y_c, Z_c])
+    Z_c = -depth_obs
+    X_c = (x_cam - cx) * depth_obs / fx
+    Y_c = (y_cam - cy) * depth_obs / fy
+    P_c = np.array([X_c, Y_c, Z_c]) 
 
     # Compute rotation matrix from quaternion
-    R = np.array([
-        [1 - 2*(q_y**2 + q_z**2),     2*(q_x*q_y - q_z*q_w),     2*(q_x*q_z + q_y*q_w)],
-        [2*(q_x*q_y + q_z*q_w),       1 - 2*(q_x**2 + q_z**2),   2*(q_y*q_z - q_x*q_w)],
-        [2*(q_x*q_z - q_y*q_w),       2*(q_y*q_z + q_x*q_w),     1 - 2*(q_x**2 + q_y**2)]
-    ])
-    
+    Rot = R.from_quat([q_x, q_y, q_z, q_w]).as_matrix()
+
     # Compute real-world coordinates in world coordinate system
-    P_w = np.dot(R, P_c) + np.array(agent_pos)
+    P_w = np.dot(Rot, P_c) + np.array(agent_pos)
     
     return P_w
 
@@ -306,6 +370,9 @@ def compute_closeness(real_pos, computed_pos):
     real_pos_2d = np.array([real_pos[0], real_pos[2]])
     computed_pos_2d = np.array([computed_pos[0], computed_pos[2]])
     return np.linalg.norm(real_pos_2d - computed_pos_2d)
+
+
+
 
 ### THESE ARE FOR THE RANDOM ALGORITHM ###
 def is_position_valid(position, grid_occ_positions):
