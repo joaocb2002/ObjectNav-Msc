@@ -7,6 +7,7 @@ from PIL import Image
 import math
 import json
 import cv2
+from sklearn.cluster import KMeans
 
 def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
     """
@@ -371,10 +372,6 @@ def compute_closeness(real_pos, computed_pos):
     computed_pos_2d = np.array([computed_pos[0], computed_pos[2]])
     return np.linalg.norm(real_pos_2d - computed_pos_2d)
 
-
-
-
-### THESE ARE FOR THE RANDOM ALGORITHM ###
 def is_position_valid(position, grid_occ_positions):
     """
     Check if the position is valid based on the occupancy grid.
@@ -407,17 +404,17 @@ def is_action_valid(action, agent_pos, agent_rot, grid_occ_positions):
     """
 
     # If action is 'turn_left' or 'turn_right', it's always valid
-    if action in ["turn_left", "turn_right"]:
+    if action in ["turn_left", "turn_right", "turn_around"]:
         return True
     
     # If action is 'move_forward' or 'move_backward', check the occupancy grid
-    if (action == "move_forward" and agent_rot == 0) or (action == "move_backward" and agent_rot == 180):
+    if (action == "move_forward" and agent_rot == 0) or (action == "move_backward" and agent_rot == 180) or (action == "move_left" and agent_rot == 270) or (action == "move_right" and agent_rot == 90):
         return is_position_valid([agent_pos[0]-1, agent_pos[1]], grid_occ_positions)
-    elif (action == "move_forward" and agent_rot == 180) or (action == "move_backward" and agent_rot == 0):
+    elif (action == "move_forward" and agent_rot == 180) or (action == "move_backward" and agent_rot == 0) or (action == "move_left" and agent_rot == 90) or (action == "move_right" and agent_rot == 270):
         return is_position_valid([agent_pos[0]+1, agent_pos[1]], grid_occ_positions)
-    elif (action == "move_forward" and agent_rot == 270) or (action == "move_backward" and agent_rot == 90):
+    elif (action == "move_forward" and agent_rot == 270) or (action == "move_backward" and agent_rot == 90) or (action == "move_left" and agent_rot == 180) or (action == "move_right" and agent_rot == 0):
         return is_position_valid([agent_pos[0], agent_pos[1]+1], grid_occ_positions)
-    elif (action == "move_forward" and agent_rot == 90) or (action == "move_backward" and agent_rot == 270):
+    elif (action == "move_forward" and agent_rot == 90) or (action == "move_backward" and agent_rot == 270) or (action == "move_left" and agent_rot == 0) or (action == "move_right" and agent_rot == 180):
         return is_position_valid([agent_pos[0], agent_pos[1]-1], grid_occ_positions)
     
     return False
@@ -452,9 +449,130 @@ def perform_action(action, agent_pos, agent_rot):
             return [agent_pos[0], agent_pos[1]-1], agent_rot
         elif agent_rot == 90:
             return [agent_pos[0], agent_pos[1]+1], agent_rot
+    elif action == "move_left":
+        if agent_rot == 0:
+            return [agent_pos[0], agent_pos[1]-1], agent_rot
+        elif agent_rot == 180:
+            return [agent_pos[0], agent_pos[1]+1], agent_rot
+        elif agent_rot == 270:
+            return [agent_pos[0]-1, agent_pos[1]], agent_rot
+        elif agent_rot == 90:
+            return [agent_pos[0]+1, agent_pos[1]], agent_rot
+    elif action == "move_right":
+        if agent_rot == 0:
+            return [agent_pos[0], agent_pos[1]+1], agent_rot
+        elif agent_rot == 180:
+            return [agent_pos[0], agent_pos[1]-1], agent_rot
+        elif agent_rot == 270:
+            return [agent_pos[0]+1, agent_pos[1]], agent_rot
+        elif agent_rot == 90:
+            return [agent_pos[0]-1, agent_pos[1]], agent_rot
+    elif action == "turn_around":
+        return agent_pos, (agent_rot + 180) % 360
     elif action == "turn_left":
         return agent_pos, (agent_rot + 90) % 360
     elif action == "turn_right":
         return agent_pos, (agent_rot - 90) % 360
 
     return None, None
+
+def cluster_mapping(occ_grid_map, cluster_num):
+    """
+    Cluster the occupancy grid map into a specified number of clusters using KMeans.
+
+    Args:
+        occ_grid_map (np.ndarray): An (N, 2) array where each row is (x, y) of a free cell.
+        cluster_num (int): The number of clusters to form.
+
+    Returns:
+        dict: Mapping from (x, y) tuple to cluster index.
+    """
+    kmeans = KMeans(n_clusters=cluster_num, n_init=100, random_state=0)
+    labels = kmeans.fit_predict(occ_grid_map)
+    
+    # Create mapping from coordinate tuple to cluster label
+    cluster_map = {tuple(coord): label for coord, label in zip(occ_grid_map, labels)}
+    
+    return cluster_map
+
+def get_cluster_centers(cluster_map, cluster_num):
+    """
+    Get the closest coordinate to the mean of each cluster.
+
+    Args:
+        cluster_map (dict): Mapping from (x, y) tuple to cluster index.
+        cluster_num (int): The number of clusters.
+
+    Returns:
+        list: List of cluster centers.
+    """
+    cluster_centers = []
+
+    for i in range(cluster_num):
+        coords = [np.array(coord) for coord, label in cluster_map.items() if label == i]
+        if coords:
+            coords_array = np.vstack(coords)
+            center = np.mean(coords_array, axis=0)
+            distances = np.linalg.norm(coords_array - center, axis=1)
+            closest_coord = tuple(coords_array[np.argmin(distances)])
+            cluster_centers.append(closest_coord)
+
+    return cluster_centers
+
+def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw, cluster_map, cluster_num, cluster_centers):
+    """
+    Displays the top-down map and occupancy grid map with the agent's position and orientation.
+
+    Args:
+        topdown_map (np.ndarray): Rendered top-down map image.
+        occ_grid_map (np.ndarray): Rendered occupancy grid map image.
+        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_yaw (float): Agent's yaw angle in degrees.
+        cluster_map (dict): Mapping from (x, y) tuple to cluster index.
+        cluster_num (int): The number of clusters.
+        cluster_centers (list): List of cluster centers.
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6, 3))
+
+    # Compute the agent position and radius in the top-down map and occupancy grid
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
+    topdown_radius, occ_grid_radius = agent_radius_tpl
+
+    # Top-down map
+    ax1.imshow(topdown_map)
+    ax1.set_title('topdown map (Z, X): [{:.0f}, {:.0f}]'.format(map_x, map_y))
+    ax1.axis('off')
+
+    # Occupancy grid
+    ax2.imshow(occ_grid_map)
+    ax2.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
+    ax2.axis('off')
+
+    # Black grid lines
+    rows, cols = occ_grid_map.shape[:2]
+    for i in range(rows):
+        ax2.axhline(y=i-0.5, color='black', linewidth=0.5)
+    for j in range(cols):
+        ax2.axvline(x=j-0.5, color='black', linewidth=0.5)
+
+    # Plot each cluster with a different color in occupancy grid
+    for i in range(cluster_num):
+        cluster_coords = [coord for coord, label in cluster_map.items() if label == i]
+        if cluster_coords:
+            x_coords, y_coords = zip(*cluster_coords)
+            ax2.scatter(y_coords, x_coords, label=f'Cluster {i}', alpha=0.4)
+
+    # Plot cluster centers
+    for i, center in enumerate(cluster_centers):
+        ax2.scatter(center[1], center[0], marker='x', color='black', s=100, label=f'Center {i}')
+
+    # Draw the agent position and orientation on the top-down map and occupancy grid
+    agent_yaw = math.radians(agent_yaw)
+    ax1.add_patch(plt.Circle((map_y, map_x), topdown_radius*2/3, color="red", fill=True))
+    ax1.add_patch(plt.Arrow(map_y, map_x, -topdown_radius * np.sin(agent_yaw), -topdown_radius * np.cos(agent_yaw), width=topdown_radius / 2, color="black"))
+    ax2.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius*2/3, color="red", fill=True))
+    ax2.add_patch(plt.Arrow(grid_y, grid_x, -occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
+
+    plt.tight_layout()
+    plt.show()
