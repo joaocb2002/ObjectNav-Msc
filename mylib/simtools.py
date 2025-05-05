@@ -330,7 +330,7 @@ def merge_rgb_yolo_outputs(rgb, xyxy, cls, conf, names):
     for i in range(len(xyxy)):
         # Extract data
         box = xyxy[i].astype(int)
-        class_id = int(cls[i][0])
+        class_id = int(cls[i])
         confidence = conf[i][0]
         label = f"{names[class_id]} {confidence:.2f}"
 
@@ -368,7 +368,7 @@ def was_object_found(object_id, found_objects_ids, confidences, bboxes, threshol
         threshold (float): Confidence threshold for considering an object as found.
     """
     for i in range(len(found_objects_ids)):
-        class_id = int(found_objects_ids[i][0])
+        class_id = int(found_objects_ids[i])
         confidence = confidences[i][0]
         if class_id == object_id and confidence >= threshold:
             return True, bboxes[i]

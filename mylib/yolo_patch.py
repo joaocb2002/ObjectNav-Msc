@@ -197,8 +197,9 @@ class PatchedBoxes(OriginalBoxes):
     @property
     def cls(self):
         if self.data.shape[1] > 6:
-            return self.data[:, 6:].argmax(1, keepdim=True).float()
-        return self.data[:, 5:6].float()
+            return self.data[:, 6:].argmax(1).to(torch.int)
+        return self.data[:, 5].to(torch.int)
+
 
 # Apply the class override (this must be last)
 results_mod.Boxes = PatchedBoxes
