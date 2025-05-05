@@ -10,11 +10,5 @@
         "target_object": "laptop",
         "target_object_id": 63,
         "target_object_location": [2.0012776851654053, 0.5161712765693665, -0.07372961938381195]
-    },
-    {
-        "scene": "FloorPlan225_physics",
-        "target_object": "chair",
-        "target_object_id": 56,
-        "target_object_location": [4.572985649108887, 0.005323082208633423, 3.863009214401245]
     }
 ]

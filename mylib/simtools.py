@@ -1,3 +1,4 @@
+import cv2
 import habitat_sim
 from scipy.spatial.transform import Rotation as R
 from habitat.utils.visualizations import maps
@@ -6,9 +7,11 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import math
 import json
-import cv2
 from sklearn.cluster import KMeans
 
+# -----------------------------
+# Display Functions
+# -----------------------------
 def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
     """
     Displays a 4-panel visualization of the agent's simulation state, including:
@@ -210,6 +213,67 @@ def display_topdown_maps_with_target(topdown_map, occ_grid_map, agent_positions_
     plt.tight_layout()
     plt.show()
 
+def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw, cluster_map, cluster_num, cluster_centers):
+    """
+    Displays the top-down map and occupancy grid map with the agent's position and orientation.
+
+    Args:
+        topdown_map (np.ndarray): Rendered top-down map image.
+        occ_grid_map (np.ndarray): Rendered occupancy grid map image.
+        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_yaw (float): Agent's yaw angle in degrees.
+        cluster_map (dict): Mapping from (x, y) tuple to cluster index.
+        cluster_num (int): The number of clusters.
+        cluster_centers (list): List of cluster centers.
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6, 3))
+
+    # Compute the agent position and radius in the top-down map and occupancy grid
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
+    topdown_radius, occ_grid_radius = agent_radius_tpl
+
+    # Top-down map
+    ax1.imshow(topdown_map)
+    ax1.set_title('topdown map (Z, X): [{:.0f}, {:.0f}]'.format(map_x, map_y))
+    ax1.axis('off')
+
+    # Occupancy grid
+    ax2.imshow(occ_grid_map)
+    ax2.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
+    ax2.axis('off')
+
+    # Black grid lines
+    rows, cols = occ_grid_map.shape[:2]
+    for i in range(rows):
+        ax2.axhline(y=i-0.5, color='black', linewidth=0.5)
+    for j in range(cols):
+        ax2.axvline(x=j-0.5, color='black', linewidth=0.5)
+
+    # Plot each cluster with a different color in occupancy grid
+    for i in range(cluster_num):
+        cluster_coords = [coord for coord, label in cluster_map.items() if label == i]
+        if cluster_coords:
+            x_coords, y_coords = zip(*cluster_coords)
+            ax2.scatter(y_coords, x_coords, label=f'Cluster {i}', alpha=0.4)
+
+    # Plot cluster centers
+    for i, center in enumerate(cluster_centers):
+        ax2.scatter(center[1], center[0], marker='x', color='black', s=100, label=f'Center {i}')
+
+    # Draw the agent position and orientation on the top-down map and occupancy grid
+    agent_yaw = math.radians(agent_yaw)
+    ax1.add_patch(plt.Circle((map_y, map_x), topdown_radius*2/3, color="red", fill=True))
+    ax1.add_patch(plt.Arrow(map_y, map_x, -topdown_radius * np.sin(agent_yaw), -topdown_radius * np.cos(agent_yaw), width=topdown_radius / 2, color="black"))
+    ax2.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius*2/3, color="red", fill=True))
+    ax2.add_patch(plt.Arrow(grid_y, grid_x, -occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
+
+    plt.tight_layout()
+    plt.show()
+
+# -----------------------------
+# Sensor Functions
+# -----------------------------
 def save_rgb_camera_intrinsics(sensor_spec):
     """
     Save the RGB camera intrinsics to a JSON file.
@@ -238,6 +302,9 @@ def save_rgb_camera_intrinsics(sensor_spec):
     with open(intrinsics_file, "w") as f:
         json.dump(intrinsics, f, indent=4)
 
+# -----------------------------
+# Utility Functions
+# -----------------------------
 def get_class_color(class_id):
     """
     Get a random color for the class ID.
@@ -287,6 +354,9 @@ def merge_rgb_yolo_outputs(rgb, xyxy, cls, conf, names):
         cv2.putText(rgb, label, (box[0], box[1] - baseline), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, text_color, 1)
 
+# -----------------------------
+# Simulation Functions
+# -----------------------------
 def was_object_found(object_id, found_objects_ids, confidences, bboxes, threshold=0.5):
     """
     Check if an object was found based on its ID and confidence score and return its bounding box.
@@ -307,7 +377,7 @@ def was_object_found(object_id, found_objects_ids, confidences, bboxes, threshol
 
 def compute_travelled_distance(start_pos, end_pos):
     """
-    Compute the travelled distance between two positions in 3D space.
+    Compute the linear travelled distance between two positions in 3D space.
 
     Args:
         start_pos (list): Starting position [x, y, z].
@@ -476,6 +546,10 @@ def perform_action(action, agent_pos, agent_rot):
 
     return None, None
 
+
+# -----------------------------
+# Clustering Functions
+# -----------------------------
 def cluster_mapping(occ_grid_map, cluster_num):
     """
     Cluster the occupancy grid map into a specified number of clusters using KMeans.
@@ -514,65 +588,44 @@ def get_cluster_centers(cluster_map, cluster_num):
             coords_array = np.vstack(coords)
             center = np.mean(coords_array, axis=0)
             distances = np.linalg.norm(coords_array - center, axis=1)
-            closest_coord = tuple(coords_array[np.argmin(distances)])
+            closest_coord = list(coords_array[np.argmin(distances)])
             cluster_centers.append(closest_coord)
 
     return cluster_centers
 
-def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw, cluster_map, cluster_num, cluster_centers):
+def get_closest_cluster_center(agent_pos, world_cluster_centers, pathfinder):
     """
-    Displays the top-down map and occupancy grid map with the agent's position and orientation.
+    Get the closest cluster center to the agent's position.
 
     Args:
-        topdown_map (np.ndarray): Rendered top-down map image.
-        occ_grid_map (np.ndarray): Rendered occupancy grid map image.
-        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
-        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
-        agent_yaw (float): Agent's yaw angle in degrees.
-        cluster_map (dict): Mapping from (x, y) tuple to cluster index.
-        cluster_num (int): The number of clusters.
-        cluster_centers (list): List of cluster centers.
+        agent_pos (list): Agent's position [x, y, z].
+        world_cluster_centers (list): List of cluster centers in world coordinates [x, y, z].
+        pathfinder (habitat_sim.PathFinder): PathFinder object for navigation.
+
+    Returns:
+        list: Closest world cluster center [x, y, z].
+        float: Distance to the closest cluster center.
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6, 3))
+    closest_center = None
+    min_distance = float('inf')
 
-    # Compute the agent position and radius in the top-down map and occupancy grid
-    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
-    topdown_radius, occ_grid_radius = agent_radius_tpl
+    for center in world_cluster_centers:
 
-    # Top-down map
-    ax1.imshow(topdown_map)
-    ax1.set_title('topdown map (Z, X): [{:.0f}, {:.0f}]'.format(map_x, map_y))
-    ax1.axis('off')
+        # Create a ShortestPath object
+        shortest_path = habitat_sim.nav.ShortestPath()
 
-    # Occupancy grid
-    ax2.imshow(occ_grid_map)
-    ax2.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
-    ax2.axis('off')
+        # Set start and end positions (numpy arrays of 3D coordinates)
+        shortest_path.requested_start = np.array(agent_pos)
+        shortest_path.requested_end = np.array(center)
 
-    # Black grid lines
-    rows, cols = occ_grid_map.shape[:2]
-    for i in range(rows):
-        ax2.axhline(y=i-0.5, color='black', linewidth=0.5)
-    for j in range(cols):
-        ax2.axvline(x=j-0.5, color='black', linewidth=0.5)
+        # Use find_path
+        found = pathfinder.find_path(shortest_path)
 
-    # Plot each cluster with a different color in occupancy grid
-    for i in range(cluster_num):
-        cluster_coords = [coord for coord, label in cluster_map.items() if label == i]
-        if cluster_coords:
-            x_coords, y_coords = zip(*cluster_coords)
-            ax2.scatter(y_coords, x_coords, label=f'Cluster {i}', alpha=0.4)
+        # Check result
+        if found:
+            distance = shortest_path.geodesic_distance
+            if distance < min_distance:
+                min_distance = distance
+                closest_center = center
 
-    # Plot cluster centers
-    for i, center in enumerate(cluster_centers):
-        ax2.scatter(center[1], center[0], marker='x', color='black', s=100, label=f'Center {i}')
-
-    # Draw the agent position and orientation on the top-down map and occupancy grid
-    agent_yaw = math.radians(agent_yaw)
-    ax1.add_patch(plt.Circle((map_y, map_x), topdown_radius*2/3, color="red", fill=True))
-    ax1.add_patch(plt.Arrow(map_y, map_x, -topdown_radius * np.sin(agent_yaw), -topdown_radius * np.cos(agent_yaw), width=topdown_radius / 2, color="black"))
-    ax2.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius*2/3, color="red", fill=True))
-    ax2.add_patch(plt.Arrow(grid_y, grid_x, -occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
-
-    plt.tight_layout()
-    plt.show()
+    return closest_center, min_distance
