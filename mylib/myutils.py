@@ -148,3 +148,14 @@ def yaw_to_quaternion(yaw_deg):
     y = math.sin(half_yaw)
     z = 0
     return quaternion.quaternion(w, x, y, z)
+
+def bin_index(scale, bin_vector):
+    """
+    Computes the bin index for a given scale and bin vector.
+    """
+    bin_index = 0
+    for i in range(len(bin_vector)):
+        if scale <= bin_vector[i] or scale > bin_vector[-1]:
+            break
+        bin_index += 1
+    return bin_index

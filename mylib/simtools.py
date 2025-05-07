@@ -303,7 +303,7 @@ def save_rgb_camera_intrinsics(sensor_spec):
         json.dump(intrinsics, f, indent=4)
 
 # -----------------------------
-# Utility Functions
+# YOLO Utils Functions
 # -----------------------------
 def get_class_color(class_id):
     """
@@ -353,6 +353,34 @@ def merge_rgb_yolo_outputs(rgb, xyxy, cls, conf, names):
         # Put label text
         cv2.putText(rgb, label, (box[0], box[1] - baseline), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, text_color, 1)
+
+def parse_detection_results(results):
+    """
+    Extract detection outputs from YOLO-like model results.
+
+    Args:
+        results: List of detection results (e.g., from Ultralytics YOLOv8).
+
+    Returns:
+        tuple: (xyxy, conf, cls, prob_vectors, names)
+            - xyxy: ndarray of shape (N, 4), bounding boxes in [x1, y1, x2, y2] format
+            - conf: ndarray of shape (N,), confidence scores
+            - cls: ndarray of shape (N,), class IDs
+            - prob_vectors: ndarray of shape (N, num_classes), per-class probabilities
+            - names: list or dict of class names
+            - num_detections: int, number of detections
+    """
+    result = results[0]  # One image, one result
+
+    xyxy = result.boxes.xyxy.cpu().numpy()         # (N, 4)
+    conf = result.boxes.conf.cpu().numpy()         # (N,)
+    cls = result.boxes.cls.cpu().numpy()           # (N,)
+    prob_vectors = result.boxes.data[:, 6:].cpu().numpy()  # (N, num_classes)
+    names = result.names                           # class names
+    num_detections = len(xyxy)                    # number of detections
+
+    return xyxy, conf, cls, prob_vectors, names, num_detections
+
 
 # -----------------------------
 # Simulation Functions
@@ -629,3 +657,29 @@ def get_closest_cluster_center(agent_pos, world_cluster_centers, pathfinder):
                 closest_center = center
 
     return closest_center, min_distance
+
+
+# -----------------------------
+# Map Functions
+# -----------------------------
+def get_2d_coords(object_position, topdown_resolution, occ_grid_resolution, pathfinder):
+    """
+    Convert a 3D object position into 2D grid coordinates for both top-down and occupancy grids.
+
+    Args:
+        object_position: tuple or list (x, y, z) in world coordinates
+        topdown_resolution: resolution value for the top-down map
+        occ_grid_resolution: resolution value for the occupancy grid
+        pathfinder: Habitat pathfinder instance
+
+    Returns:
+        tuple: (map_position, grid_position)
+            - map_position: 2D coordinate in top-down grid
+            - grid_position: 2D coordinate in occupancy grid
+    """
+    x, y, z = object_position
+
+    map_position = list(maps.to_grid(z, x, topdown_resolution, pathfinder=pathfinder))
+    grid_position = list(maps.to_grid(z, x, occ_grid_resolution, pathfinder=pathfinder))
+
+    return map_position, grid_position
