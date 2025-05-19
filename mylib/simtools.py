@@ -8,6 +8,7 @@ from PIL import Image
 import math
 import json
 from sklearn.cluster import KMeans
+import heapq
 
 # -----------------------------
 # Display Functions
@@ -208,6 +209,8 @@ def display_topdown_maps_with_target(topdown_map, occ_grid_map, agent_positions_
         [target_pos_grid[0] + occ_grid_radius*2/3, target_pos_grid[0] - occ_grid_radius*2/3], color='green')
     ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
         [target_pos_grid[0] - occ_grid_radius*2/3, target_pos_grid[0] + occ_grid_radius*2/3], color='green')
+    
+    
 
 
     plt.tight_layout()
@@ -621,7 +624,7 @@ def get_cluster_centers(cluster_map, cluster_num):
 
     return cluster_centers
 
-def get_closest_cluster_center(agent_pos, world_cluster_centers, pathfinder):
+def get_closest_cluster_center_navmesh(agent_pos, world_cluster_centers, pathfinder):
     """
     Get the closest cluster center to the agent's position.
 
@@ -657,6 +660,159 @@ def get_closest_cluster_center(agent_pos, world_cluster_centers, pathfinder):
                 closest_center = center
 
     return closest_center, min_distance
+
+def get_closest_cluster_path(agent_pos, grid_cluster_centers, grid_free_cells):
+    """
+    Get the path to the closest cluster center from the agent's position in 2D space.
+
+    Args:
+        agent_pos (tuple): Agent's position (x, y).
+        grid_cluster_centers (list): List of cluster centers (x, y).
+        grid_free_cells (2D list): Grid where 0 = free, 1 = occupied.
+
+    Returns:
+        tuple: Closest cluster center (x, y).
+        list: Path to the closest cluster center.
+    """
+    agent_pos = tuple(agent_pos)
+    grid_cluster_centers = [tuple(c) for c in grid_cluster_centers]
+
+    closest_center = None
+    min_path_length = float('inf')
+    best_path = None
+
+    for center in grid_cluster_centers:
+        path = a_star(grid_free_cells, agent_pos, center)
+        if path is not None and len(path) < min_path_length:
+            closest_center = center
+            min_path_length = len(path)
+            best_path = path
+
+    closest_center = list(closest_center) if closest_center is not None else None
+    best_path = [list(p) for p in best_path] if best_path is not None else None
+
+    # Remove first cell from the path
+    if best_path is not None and len(best_path) > 0:
+        best_path.pop(0)
+
+    return closest_center, best_path
+
+
+
+# -----------------------------
+# A* Functions
+# -----------------------------
+def heuristic(a, b):
+    return np.linalg.norm(np.array(a) - np.array(b))
+
+def a_star(free_cells, start, goal):
+    start = tuple(start)
+    goal = tuple(goal)
+
+    # Convert free cell list to set of tuples for O(1) lookup
+    free_set = {tuple(cell) for cell in free_cells}
+
+    open_set = []
+    heapq.heappush(open_set, (heuristic(start, goal), 0, start, [start]))
+    visited = set()
+
+    while open_set:
+        est_total, cost_so_far, current, path = heapq.heappop(open_set)
+        current = tuple(current)
+
+        if current == goal:
+            return path
+        if current in visited:
+            continue
+        visited.add(current)
+
+        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+            neighbor = (current[0] + dx, current[1] + dy)
+            if neighbor in free_set and neighbor not in visited:
+                heapq.heappush(
+                    open_set,
+                    (
+                        cost_so_far + 1 + heuristic(neighbor, goal),
+                        cost_so_far + 1,
+                        neighbor,
+                        path + [neighbor]
+                    )
+                )
+    return None
+
+
+# -----------------------------
+# Path Planning Functions
+# -----------------------------
+def compute_facing_rotation(agent_pos, goal_pos):
+    """
+    Returns one of [0, 90, 180, 270], representing the best orientation
+    for the agent to face the goal cell.
+    """
+    dx = goal_pos[0] - agent_pos[0]
+    dy = goal_pos[1] - agent_pos[1]
+
+    # Determine the dominant axis
+    if abs(dx) > abs(dy):
+        return 180 if dx > 0 else 0   # Down or Up
+    else:
+        return 270 if dy > 0 else 90  # Right or Left
+    
+def compute_rotation_action(current_rotation, desired_rotation):
+    """
+    Returns one of ['turn_left', 'turn_right', 'turn_around', None]
+    to rotate from current_rotation to desired_rotation.
+    """
+    delta = (desired_rotation - current_rotation) % 360
+
+    if delta == 0:
+        return None
+    elif delta == 90:
+        return 'turn_left'
+    elif delta == 180:
+        return 'turn_around'
+    elif delta == 270:
+        return 'turn_right'
+    else:
+        raise ValueError("Invalid rotation difference")
+
+def compute_move_action_relative(current_pos, next_pos, current_rotation):
+    """
+    Returns a relative move action from current_pos to next_pos
+    based on current_rotation.
+    
+    Output is one of:
+        'move_forward', 'move_left', 'move_right', 'move_backward'
+    """
+    dx = next_pos[0] - current_pos[0]
+    dy = next_pos[1] - current_pos[1]
+
+    # Direction of movement in global terms
+    direction = None
+    if dx == -1 and dy == 0:
+        direction = 0     # up
+    elif dx == 0 and dy == -1:
+        direction = 90    # left
+    elif dx == 1 and dy == 0:
+        direction = 180   # down
+    elif dx == 0 and dy == 1:
+        direction = 270   # right
+    else:
+        raise ValueError("Invalid move: cells are not adjacent")
+
+    # Convert global direction to relative move based on current rotation
+    delta = (direction - current_rotation) % 360
+
+    if delta == 0:
+        return 'move_forward'
+    elif delta == 90:
+        return 'move_left'
+    elif delta == 180:
+        return 'move_backward'
+    elif delta == 270:
+        return 'move_right'
+    else:
+        raise ValueError("Unexpected rotation delta")
 
 
 # -----------------------------
