@@ -10,5 +10,11 @@
         "target_object": "laptop",
         "target_object_id": 63,
         "target_object_location": [2.0012776851654053, 0.5161712765693665, -0.07372961938381195]
+    },
+    {
+        "scene": "FloorPlan_Train3_4",
+        "target_object": "laptop",
+        "target_object_id": 63,
+        "target_object_location": [-9.241811752319336, 0.35663527250289917, -2.1109025478363037]
     }
 ]
