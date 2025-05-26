@@ -274,6 +274,93 @@ def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_position
     plt.tight_layout()
     plt.show()
 
+
+# -----------------------------
+# Belief Map Functions
+# -----------------------------
+def compute_entropy_map(belief_map, occ_grid_map, free_color=(255, 255, 255)):
+    """
+    Computes entropy for object (grey) cells only. Sets entropy to 0 for free (white) cells.
+
+    Parameters:
+        belief_map (list of list of np.ndarray): Dirichlet belief map
+        occ_grid_map (np.ndarray): 3D occupancy map (H x W x 3), with RGB values
+        free_color (tuple): RGB color representing free cells (default is white)
+
+    Returns:
+        np.ndarray: 2D entropy map
+    """
+    height = len(belief_map)
+    width = len(belief_map[0])
+    entropy_map = np.zeros((height, width))
+
+    for y in range(height):
+        for x in range(width):
+            if tuple(occ_grid_map[y][x]) == free_color:
+                entropy_map[y][x] = 0.0  # Free cell
+            else:
+                alpha = belief_map[y][x]
+                alpha = np.clip(alpha, 1e-6, None)
+                probs = alpha / np.sum(alpha)
+                entropy = -np.sum(probs * np.log(probs + 1e-10))
+                entropy_map[y][x] = entropy
+
+    return entropy_map
+
+def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
+    """
+    Displays the top-down map and occupancy grid map with the agent's position and orientation. 
+    Also displays the entropy map.
+
+    Args:
+        topdown_map (np.ndarray): Rendered top-down map image.
+        occ_grid_map (np.ndarray): Rendered occupancy grid map image.
+        entropy_map (np.ndarray): 2D array representing the entropy map.
+        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_yaw (float): Agent's yaw angle in degrees.
+    """
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(9, 3))
+
+    # Compute the agent position and radius in the top-down map and occupancy grid
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
+    topdown_radius, occ_grid_radius = agent_radius_tpl
+
+    # Top-down map
+    ax1.imshow(topdown_map)
+    ax1.set_title('topdown map (Z, X): [{:.0f}, {:.0f}]'.format(map_x, map_y))
+    ax1.axis('off')
+
+    # Occupancy grid
+    ax2.imshow(occ_grid_map)
+    ax2.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
+    ax2.axis('off')
+
+    # Entropy map
+    ax3.imshow(entropy_map, cmap='hot')
+    ax3.set_title('entropy map')
+    ax3.axis('off')
+
+    # Black grid lines
+    rows, cols = occ_grid_map.shape[:2]
+    for i in range(rows):
+        ax2.axhline(y=i-0.5, color='black', linewidth=0.5)
+        ax3.axhline(y=i-0.5, color='black', linewidth=0.5)
+    for j in range(cols):
+        ax2.axvline(x=j-0.5, color='black', linewidth=0.5)
+        ax3.axvline(x=j-0.5, color='black', linewidth=0.5)
+
+    # Draw the agent position and orientation on the top-down map and occupancy grid
+    agent_yaw = math.radians(agent_yaw)
+    ax1.add_patch(plt.Circle((map_y, map_x), topdown_radius*2/3, color="red", fill=True))
+    ax1.add_patch(plt.Arrow(map_y, map_x, -topdown_radius * np.sin(agent_yaw), -topdown_radius * np.cos(agent_yaw), width=topdown_radius / 2, color="black"))
+    ax2.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius*2/3, color="red", fill=True))
+    ax2.add_patch(plt.Arrow(grid_y, grid_x, -occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
+
+    plt.tight_layout()
+    plt.show()
+
+
 # -----------------------------
 # Sensor Functions
 # -----------------------------

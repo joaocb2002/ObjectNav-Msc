@@ -1,5 +1,83 @@
 import numpy as np
-from scipy.special import gammaln, psi
+from scipy.special import gammaln, psi, gamma
+
+def bin_index(scale, bin_vector):
+    """
+    Computes the bin index for a given scale and bin vector.
+    """
+    bin_index = 0
+    for i in range(len(bin_vector)):
+        if scale <= bin_vector[i] or scale > bin_vector[-1]:
+            break
+        bin_index += 1
+    return bin_index
+
+def compute_likelihood_vector(score_vec, bbox_scale, dirichlet_priors, classes_bins):
+    "Computes the likelihood vector for a given score vector using Dirichlet priors."
+
+    # Initialize the likelihood vector with zeros
+    likelihood_vector = []
+
+    # Go through each possible indoor class 
+    for key in dirichlet_priors:
+        
+        # Compute the correct bin using the bounding box scale
+        bin_idx = bin_index(bbox_scale, classes_bins[key])
+        print(f"Class: {key}, Bin Index: {bin_idx}, Scale: {bbox_scale}")
+
+        # Fetch the Dirichlet prior for this class and bin
+        alpha = dirichlet_priors[key][bin_idx]
+
+        # Compute the likelihood vector for this class, i.e., the probability of score_vec given the prior
+        l_k = dirichlet_pdf(score_vec, alpha)
+
+        # Store the likelihood in the vector
+        likelihood_vector.append(l_k)
+
+    # Convert to a numpy array and normalize
+    likelihood_vector = np.array(likelihood_vector)
+    #likelihood_vector /= np.sum(likelihood_vector)
+    return likelihood_vector
+
+def dirichlet_pdf(x, alpha):
+    """
+    Compute the Dirichlet PDF at point x for parameters alpha.
+
+    Parameters:
+        x (array-like): K-dimensional probability vector (sum to 1).
+        alpha (array-like): K-dimensional Dirichlet parameters.
+
+    Returns:
+        float: Probability density at x.
+    """
+    x = np.asarray(x)
+    alpha = np.asarray(alpha)
+
+    print(f"Dirichlet PDF: x={x}, alpha={alpha}")
+
+    print(f"Sum of x: {np.sum(x)}")
+    print(f"Sum of alpha: {np.sum(alpha)}")
+
+    if not np.isclose(np.sum(x), 1.0):
+        raise ValueError("Input vector x must sum to 1.")
+    if np.any(x < 0):
+        raise ValueError("All elements of x must be >= 0.")
+    if np.any(alpha <= 0):
+        raise ValueError("All alpha parameters must be > 0.")
+
+    # log(B(alpha)) = sum(log(Gamma(alpha_i))) - log(Gamma(sum(alpha)))
+    log_B = np.sum(gammaln(alpha)) - gammaln(np.sum(alpha))
+    log_pdf = -log_B + np.sum((alpha - 1) * np.log(x))
+
+    return np.exp(log_pdf)
+
+
+
+
+
+
+
+
 
 def kaplan_update(prior, score_vec, dirichlet_alpha, background_idx=None):
     """

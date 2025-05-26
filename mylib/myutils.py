@@ -5,6 +5,7 @@ import cv2
 from io import BytesIO
 import math
 import quaternion
+from scipy.ndimage import label
 
 def map_to_rgb(image):
     """
@@ -153,9 +154,71 @@ def bin_index(scale, bin_vector):
     """
     Computes the bin index for a given scale and bin vector.
     """
-    bin_index = 0
+    bin_index = -1
     for i in range(len(bin_vector)):
         if scale <= bin_vector[i] or scale > bin_vector[-1]:
             break
         bin_index += 1
     return bin_index
+
+def retain_largest_white_chunk(grid):
+    """
+    Retains the largest connected component of white ([255, 255, 255]) cells in the grid,
+    turning all other white cells to grey ([128, 128, 128]).
+
+    Parameters:
+        grid (np.ndarray): A 3D numpy array of shape (H, W, 3), representing the RGB grid.
+
+    Returns:
+        np.ndarray: Modified grid with only the largest white component preserved as white.
+    """
+    white = np.array([255, 255, 255])
+    grey = np.array([128, 128, 128])
+
+    # Create a binary mask of white cells
+    white_mask = np.all(grid == white, axis=-1)
+
+    # Label connected white regions (using 4-connectivity)
+    structure = np.array([[0,1,0],[1,1,1],[0,1,0]])  # 4-connectivity
+    labeled_array, num_features = label(white_mask, structure=structure)
+
+    if num_features == 0:
+        return grid  # no white regions to process
+
+    # Find the label with the largest number of white cells
+    counts = np.bincount(labeled_array.ravel())
+    counts[0] = 0  # exclude background
+    largest_label = np.argmax(counts)
+
+    # Create mask of cells that belong to the largest white chunk
+    largest_chunk_mask = labeled_array == largest_label
+
+    # Set all white cells not in the largest chunk to grey
+    to_grey_mask = white_mask & ~largest_chunk_mask
+    grid[to_grey_mask] = grey
+
+    return grid
+
+def compute_bbox_scale(bbox, rgb):
+    """
+    Computes the scale of a bounding box area relative to the RGB image area.
+
+    Parameters:
+        bbox (list or tuple): Bounding box coordinates in the format [x_min, y_min, x_max, y_max].
+        rgb (np.ndarray): RGB image of shape (H, W, 3).
+    Returns:
+        float: Scale of the bounding box area relative to the RGB image area.
+    """
+
+    # Calculate the area of the bounding box
+    bbox_width = bbox[2] - bbox[0]
+    bbox_height = bbox[3] - bbox[1]
+    bbox_area = bbox_width * bbox_height
+
+    # Calculate the area of the RGB image
+    rgb_area = rgb.shape[0] * rgb.shape[1]
+
+    # Compute the scale
+    scale = 100*bbox_area / rgb_area
+
+    return scale
