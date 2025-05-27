@@ -93,7 +93,10 @@ def non_max_suppression(
             continue
 
         box, cls_conf, mask = x.split((4, nc, nm), 1)
+        cls_conf_sum = cls_conf.sum(dim=1, keepdim=True).clamp(min=1e-9)
+        cls_conf = cls_conf / cls_conf_sum
         conf, j = cls_conf.max(1, keepdim=True)
+
         x = torch.cat((box, conf, j.float(), cls_conf, mask), 1)[conf.view(-1) > conf_thres]
 
         if classes is not None:

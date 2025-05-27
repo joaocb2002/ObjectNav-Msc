@@ -159,6 +159,9 @@ def bin_index(scale, bin_vector):
         if scale <= bin_vector[i] or scale > bin_vector[-1]:
             break
         bin_index += 1
+
+    if bin_index == -1: bin_index = 0
+
     return bin_index
 
 def retain_largest_white_chunk(grid):

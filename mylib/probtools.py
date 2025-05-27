@@ -5,11 +5,15 @@ def bin_index(scale, bin_vector):
     """
     Computes the bin index for a given scale and bin vector.
     """
-    bin_index = 0
+    bin_index = -1
     for i in range(len(bin_vector)):
         if scale <= bin_vector[i] or scale > bin_vector[-1]:
             break
         bin_index += 1
+
+    if bin_index == -1:
+        bin_index = 0
+        
     return bin_index
 
 def compute_likelihood_vector(score_vec, bbox_scale, dirichlet_priors, classes_bins):
@@ -17,19 +21,38 @@ def compute_likelihood_vector(score_vec, bbox_scale, dirichlet_priors, classes_b
 
     # Initialize the likelihood vector with zeros
     likelihood_vector = []
-
+    print("\n\n\n\n\n\n")
     # Go through each possible indoor class 
     for key in dirichlet_priors:
         
         # Compute the correct bin using the bounding box scale
         bin_idx = bin_index(bbox_scale, classes_bins[key])
-        print(f"Class: {key}, Bin Index: {bin_idx}, Scale: {bbox_scale}")
+        print(f"Class: {key}, Bin Index: {bin_idx}, Scale: {bbox_scale}", end = ", ")
+        print(f"Bin Vector: {classes_bins[key]}")
+        print(f"Score Vector: {score_vec}")
+        print(f"Score Vector sum: {np.sum(score_vec)}")
+        print(f"Score Vector max value: {np.max(score_vec)}")
+        print(f"Argmax of score vector: {np.argmax(score_vec)}\n\n")
+        print(f"Score Vector mean: {np.mean(score_vec)}")
 
         # Fetch the Dirichlet prior for this class and bin
         alpha = dirichlet_priors[key][bin_idx]
 
+        if alpha is None or len(alpha) == 0:
+            likelihood_vector.append(0.0)
+            continue
+
+        print(f"Dirichlet Prior (alpha): {alpha}")
+        print(f"Alpha sum: {np.sum(alpha)}")
+        print(f"Alpha max value: {np.max(alpha)}")
+        print(f"Argmax of alpha: {np.argmax(alpha)}")
+        print(f"Mean of alpha: {np.mean(alpha)}")
+
         # Compute the likelihood vector for this class, i.e., the probability of score_vec given the prior
-        l_k = dirichlet_pdf(score_vec, alpha)
+        l_k = scaled_dirichlet_pdf(score_vec, alpha)
+        print(f"Likelihood {l_k}")
+
+        print("\n\n")
 
         # Store the likelihood in the vector
         likelihood_vector.append(l_k)
@@ -50,24 +73,59 @@ def dirichlet_pdf(x, alpha):
     Returns:
         float: Probability density at x.
     """
+    if alpha is None or len(alpha) == 0:
+        print("Warning: Dirichlet parameters are empty. Returning 0.")
+        return 0.0
+
     x = np.asarray(x)
     alpha = np.asarray(alpha)
 
-    print(f"Dirichlet PDF: x={x}, alpha={alpha}")
-
-    print(f"Sum of x: {np.sum(x)}")
-    print(f"Sum of alpha: {np.sum(alpha)}")
-
-    if not np.isclose(np.sum(x), 1.0):
-        raise ValueError("Input vector x must sum to 1.")
-    if np.any(x < 0):
+    if not np.isclose(np.sum(x), 1.0, atol=1e-6):
+        raise ValueError(f"Input vector x must sum to 1. Got sum: {np.sum(x)}")
+    elif np.any(x < 0):
         raise ValueError("All elements of x must be >= 0.")
-    if np.any(alpha <= 0):
+    elif np.any(alpha <= 0):
         raise ValueError("All alpha parameters must be > 0.")
+    elif np.any((x == 0) & (alpha < 1)):
+        print("Warning: Dirichlet PDF evaluated at zero with alpha < 1. Returning 0.")
+        return 0.0  # log(0) with alpha < 1 is undefined
 
-    # log(B(alpha)) = sum(log(Gamma(alpha_i))) - log(Gamma(sum(alpha)))
     log_B = np.sum(gammaln(alpha)) - gammaln(np.sum(alpha))
     log_pdf = -log_B + np.sum((alpha - 1) * np.log(x))
+
+    return np.exp(log_pdf)
+
+def scaled_dirichlet_pdf(x, alpha, scale=5.0):
+    """
+    Compute the scaled Dirichlet PDF at point x for parameters alpha.
+
+    Parameters:
+        x (array-like): K-dimensional probability vector (sum to 1).
+        alpha (array-like): K-dimensional Dirichlet parameters.
+        scale (float): Scaling factor to increase concentration of the distribution.
+
+    Returns:
+        float: Probability density at x.
+    """
+    if alpha is None or len(alpha) == 0:
+        print("Warning: Dirichlet parameters are empty. Returning 0.")
+        return 0.0
+
+    x = np.asarray(x)
+    alpha = np.asarray(alpha) * scale  # Apply scaling to alpha
+
+    if not np.isclose(np.sum(x), 1.0, atol=1e-6):
+        raise ValueError(f"Input vector x must sum to 1. Got sum: {np.sum(x)}")
+    elif np.any(x < 0):
+        raise ValueError("All elements of x must be >= 0.")
+    elif np.any(alpha <= 0):
+        raise ValueError("All alpha parameters must be > 0.")
+    elif np.any((x == 0) & (alpha < 1)):
+        print("Warning: Dirichlet PDF evaluated at zero with alpha < 1. Returning 0.")
+        return 0.0  # avoid undefined behavior for log(0) with alpha < 1
+
+    log_B = np.sum(gammaln(alpha)) - gammaln(np.sum(alpha))
+    log_pdf = -log_B + np.sum((alpha - 1) * np.log(x + 1e-12))  # add small ε to avoid log(0)
 
     return np.exp(log_pdf)
 
