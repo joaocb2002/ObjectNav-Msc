@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from PIL import Image
 import cv2
-from io import BytesIO
 import math
 import quaternion
 from scipy.ndimage import label
@@ -37,7 +35,6 @@ def map_to_rgb(image):
         rgb_image[mask] = color
 
     return rgb_image
-
 
 def add_axis_to_map(image, arrow_length_ratio=0.075):
     """

@@ -1,5 +1,6 @@
+from mylib import myutils
 import numpy as np
-from scipy.special import gammaln, psi, gamma
+from scipy.special import gammaln, psi
 
 def bin_index(scale, bin_vector):
     """
@@ -11,9 +12,8 @@ def bin_index(scale, bin_vector):
             break
         bin_index += 1
 
-    if bin_index == -1:
-        bin_index = 0
-        
+    if bin_index == -1: bin_index = 0
+
     return bin_index
 
 def compute_likelihood_vector(score_vec, bbox_scale, dirichlet_priors, classes_bins):

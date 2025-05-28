@@ -274,39 +274,6 @@ def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_position
     plt.tight_layout()
     plt.show()
 
-
-# -----------------------------
-# Belief Map Functions
-# -----------------------------
-def compute_entropy_map(belief_map, occ_grid_map, free_color=(255, 255, 255)):
-    """
-    Computes entropy for object (grey) cells only. Sets entropy to 0 for free (white) cells.
-
-    Parameters:
-        belief_map (list of list of np.ndarray): Dirichlet belief map
-        occ_grid_map (np.ndarray): 3D occupancy map (H x W x 3), with RGB values
-        free_color (tuple): RGB color representing free cells (default is white)
-
-    Returns:
-        np.ndarray: 2D entropy map
-    """
-    height = len(belief_map)
-    width = len(belief_map[0])
-    entropy_map = np.zeros((height, width))
-
-    for y in range(height):
-        for x in range(width):
-            if tuple(occ_grid_map[y][x]) == free_color:
-                entropy_map[y][x] = 0.0  # Free cell
-            else:
-                alpha = belief_map[y][x]
-                alpha = np.clip(alpha, 1e-6, None)
-                probs = alpha / np.sum(alpha)
-                entropy = -np.sum(probs * np.log(probs + 1e-10))
-                entropy_map[y][x] = entropy
-
-    return entropy_map
-
 def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
     """
     Displays the top-down map and occupancy grid map with the agent's position and orientation. 
@@ -360,6 +327,38 @@ def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, age
     plt.tight_layout()
     plt.show()
 
+
+# -----------------------------
+# Belief Map Functions
+# -----------------------------
+def compute_entropy_map(belief_map, occ_grid_map, free_color=(255, 255, 255)):
+    """
+    Computes entropy for object (grey) cells only. Sets entropy to 0 for free (white) cells.
+
+    Parameters:
+        belief_map (list of list of np.ndarray): Dirichlet belief map
+        occ_grid_map (np.ndarray): 3D occupancy map (H x W x 3), with RGB values
+        free_color (tuple): RGB color representing free cells (default is white)
+
+    Returns:
+        np.ndarray: 2D entropy map
+    """
+    height = len(belief_map)
+    width = len(belief_map[0])
+    entropy_map = np.zeros((height, width))
+
+    for y in range(height):
+        for x in range(width):
+            if tuple(occ_grid_map[y][x]) == free_color:
+                entropy_map[y][x] = 0.0  # Free cell
+            else:
+                alpha = belief_map[y][x]
+                alpha = np.clip(alpha, 1e-6, None)
+                probs = alpha / np.sum(alpha)
+                entropy = -np.sum(probs * np.log(probs + 1e-10))
+                entropy_map[y][x] = entropy
+
+    return entropy_map
 
 # -----------------------------
 # Sensor Functions
@@ -475,7 +474,7 @@ def parse_detection_results(results):
 # -----------------------------
 # Simulation Functions
 # -----------------------------
-def was_object_found(object_id, found_objects_ids, confidences, bboxes, threshold=0.5):
+def was_object_found(object_id, found_objects_ids, confidences, bboxes, threshold=0.80):
     """
     Check if an object was found based on its ID and confidence score and return its bounding box.
     Args:
