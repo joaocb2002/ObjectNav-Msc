@@ -10,32 +10,49 @@ from ultralytics.utils.ops import scale_boxes, convert_torch2numpy_batch
 import torchvision
 
 # Temperature for softmax scaling
-TEMPERATURE = 1.0
+TEMPERATURE = 2.0
 
 OriginalBoxes = results_mod.Boxes
 
-def init(self, boxes, orig_shape) -> None:
-    if boxes.ndim == 1:
-        boxes = boxes[None, :]
-    n = boxes.shape[-1]
+class PatchedBoxes(OriginalBoxes):
+    def __init__(self, boxes, orig_shape):
+        if boxes.ndim == 1:
+            boxes = boxes[None, :]
+        n = boxes.shape[-1]
 
-    OriginalBoxes.__init__(self, boxes, orig_shape)
+        self.orig_shape = orig_shape
+        self.is_track = False
+        self.num_classes = 0
 
-    self.orig_shape = orig_shape
-    self.is_track = False
-    self.num_classes = 0
+        if n == 6:
+            self.format = 'xyxy_conf_cls'
+        elif n == 7:
+            self.format = 'xyxy_conf_cls_track'
+            self.is_track = True
+        else:
+            self.format = 'xyxy_conf_cls_classconf'
+            self.num_classes = n - 6
 
-    if n == 6:
-        self.format = 'xyxy_conf_cls'
-    elif n == 7:
-        self.format = 'xyxy_conf_cls_track'
-        self.is_track = True
-    else:
-        self.format = 'xyxy_conf_cls_classconf'
-        self.num_classes = n - 6
+        self.data = boxes
 
-    self.data = boxes
+    @property
+    def conf(self):
+        if self.data.shape[1] > 6:
+            return self.data[:, 6:].max(1, keepdim=True).values
+        return self.data[:, 4:5]
 
+    @property
+    def cls(self):
+        if self.data.shape[1] > 6:
+            return self.data[:, 6:].argmax(1).to(torch.int)
+        return self.data[:, 5].to(torch.int)
+
+results_mod.Boxes = PatchedBoxes
+
+# ------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
 def non_max_suppression(
     prediction,
     conf_thres=0.25,
@@ -136,6 +153,10 @@ def non_max_suppression(
     return output
 
 ultralytics.utils.ops.non_max_suppression = non_max_suppression
+# ------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
 
 original_results_init = results_mod.Results.__init__
 
@@ -144,8 +165,10 @@ def patched_results_init(self, orig_img, path, names, boxes=None, masks=None, pr
 
 results_mod.Results.__init__ = patched_results_init
 
-original_postprocess = DetectionPredictor.postprocess
-
+# ------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
 def patched_postprocess(self, preds, img, orig_imgs, **kwargs):
     preds = ultralytics.utils.ops.non_max_suppression(
         preds,
@@ -170,38 +193,3 @@ def patched_postprocess(self, preds, img, orig_imgs, **kwargs):
     return results
 
 DetectionPredictor.postprocess = patched_postprocess
-
-class PatchedBoxes(OriginalBoxes):
-    def __init__(self, boxes, orig_shape):
-        if boxes.ndim == 1:
-            boxes = boxes[None, :]
-        n = boxes.shape[-1]
-
-        self.orig_shape = orig_shape
-        self.is_track = False
-        self.num_classes = 0
-
-        if n == 6:
-            self.format = 'xyxy_conf_cls'
-        elif n == 7:
-            self.format = 'xyxy_conf_cls_track'
-            self.is_track = True
-        else:
-            self.format = 'xyxy_conf_cls_classconf'
-            self.num_classes = n - 6
-
-        self.data = boxes
-
-    @property
-    def conf(self):
-        if self.data.shape[1] > 6:
-            return self.data[:, 6:].max(1, keepdim=True).values
-        return self.data[:, 4:5]
-
-    @property
-    def cls(self):
-        if self.data.shape[1] > 6:
-            return self.data[:, 6:].argmax(1).to(torch.int)
-        return self.data[:, 5].to(torch.int)
-
-results_mod.Boxes = PatchedBoxes
