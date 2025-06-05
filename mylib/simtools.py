@@ -9,6 +9,7 @@ import math
 import json
 from sklearn.cluster import KMeans
 import heapq
+from collections import deque
 
 # -----------------------------
 # Display Functions - Standard
@@ -194,22 +195,25 @@ def display_topdown_maps_with_target(topdown_map, occ_grid_map, agent_positions,
     ax1.plot([target_pos_map[1] - topdown_radius*2/3, target_pos_map[1] + topdown_radius*2/3],
         [target_pos_map[0] + topdown_radius*2/3, target_pos_map[0] - topdown_radius*2/3], color='blue')
     ax1.plot([target_pos_map[1] - topdown_radius*2/3, target_pos_map[1] + topdown_radius*2/3],
-        [target_pos_map[0] - topdown_radius*2/3, target_pos_map[0] + topdown_radius*2/3], color='blue')
+        [target_pos_map[0] - topdown_radius*2/3, target_pos_map[0] + topdown_radius*2/3], color='blue', label='real location')
     ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
         [target_pos_grid[0] + occ_grid_radius*2/3, target_pos_grid[0] - occ_grid_radius*2/3], color='blue')
     ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
-        [target_pos_grid[0] - occ_grid_radius*2/3, target_pos_grid[0] + occ_grid_radius*2/3], color='blue')
+        [target_pos_grid[0] - occ_grid_radius*2/3, target_pos_grid[0] + occ_grid_radius*2/3], color='blue', label='real location')
 
     target_pos_map, target_pos_grid = computed_target_pos
     ax1.plot([target_pos_map[1] - topdown_radius*2/3, target_pos_map[1] + topdown_radius*2/3],
-        [target_pos_map[0] + topdown_radius*2/3, target_pos_map[0] - topdown_radius*2/3], color='green')
+        [target_pos_map[0] + topdown_radius*2/3, target_pos_map[0] - topdown_radius*2/3], color='orange')
     ax1.plot([target_pos_map[1] - topdown_radius*2/3, target_pos_map[1] + topdown_radius*2/3],
-        [target_pos_map[0] - topdown_radius*2/3, target_pos_map[0] + topdown_radius*2/3], color='green')
+        [target_pos_map[0] - topdown_radius*2/3, target_pos_map[0] + topdown_radius*2/3], color='orange', label='estimated location')
     ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
-        [target_pos_grid[0] + occ_grid_radius*2/3, target_pos_grid[0] - occ_grid_radius*2/3], color='green')
+        [target_pos_grid[0] + occ_grid_radius*2/3, target_pos_grid[0] - occ_grid_radius*2/3], color='orange')
     ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
-        [target_pos_grid[0] - occ_grid_radius*2/3, target_pos_grid[0] + occ_grid_radius*2/3], color='green')
+        [target_pos_grid[0] - occ_grid_radius*2/3, target_pos_grid[0] + occ_grid_radius*2/3], color='orange', label='estimated location')
     
+    # Final touches - small legend and layout
+    ax2.legend(loc='lower right', fontsize='small')
+    ax1.legend(loc='lower right', fontsize='small')
     plt.tight_layout()
     plt.show()
 
@@ -274,7 +278,11 @@ def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_position
     plt.tight_layout()
     plt.show()
 
-def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
+
+# -----------------------------
+# Display Functions - Dirichlet
+# -----------------------------
+def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, agent_positions, agent_radius, agent_yaw):
     """
     Displays the top-down map and occupancy grid map with the agent's position and orientation. 
     Also displays the entropy map.
@@ -283,15 +291,15 @@ def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, age
         topdown_map (np.ndarray): Rendered top-down map image.
         occ_grid_map (np.ndarray): Rendered occupancy grid map image.
         entropy_map (np.ndarray): 2D array representing the entropy map.
-        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
-        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_positions (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
         agent_yaw (float): Agent's yaw angle in degrees.
     """
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(9, 3))
 
     # Compute the agent position and radius in the top-down map and occupancy grid
-    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
-    topdown_radius, occ_grid_radius = agent_radius_tpl
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions
+    topdown_radius, occ_grid_radius = agent_radius
 
     # Top-down map
     ax1.imshow(topdown_map)
@@ -303,8 +311,6 @@ def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, age
     ax2.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
     ax2.axis('off')
 
-
-
     # Mask the zero entries
     masked_entropy = np.ma.masked_where(entropy_map == 0, entropy_map)
 
@@ -312,17 +318,14 @@ def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, age
     cmap = plt.cm.Reds
     cmap.set_bad(color='white')  # Masked (zero) values appear white
 
-    # Plotting
-    fig, ax = plt.subplots()
-    img = ax.imshow(masked_entropy, cmap=cmap, interpolation='nearest')
-    ax.set_title('Entropy Map')
-    ax.axis('off')
+    # Compute maximum entropy value
 
     # Add a colorbar for the entropy scale
-    cbar = fig.colorbar(img, ax=ax)
+    img = ax3.imshow(masked_entropy, cmap=cmap, interpolation='nearest', vmin=2.0, vmax=3.5)
+    ax3.set_title('Entropy Map')
+    ax3.axis('off')
+    cbar = fig.colorbar(img, ax=ax3)
     cbar.set_label('Entropy')
-
-    plt.show()
 
     # Black grid lines
     rows, cols = occ_grid_map.shape[:2]
@@ -941,3 +944,44 @@ def get_2d_coords(object_position, topdown_resolution, occ_grid_resolution, path
     grid_position = list(maps.to_grid(z, x, occ_grid_resolution, pathfinder=pathfinder))
 
     return map_position, grid_position
+
+def get_closest_grey_cell(white_cell, grid_occ_map):
+	"""
+	Find the closest grey cell to a given white cell in the occupancy grid, using Breadth-First Search (BFS).
+	This function assumes that the white cell is free (255, 255, 255) and the grey cells are occupied (128, 128, 128).
+
+	Args:
+		white_cell (tuple): The coordinates of the white cell (x, y).
+		grid_occ_map (np.ndarray): 2D occupancy grid map where (255, 255, 255) = free, (128, 128, 128) = occupied.
+
+	Returns:
+		tuple: Coordinates of the closest grey cell (x, y).
+	"""
+
+	# Directions for 4-connected neighbors
+	directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+	# Initialize BFS queue and visited set
+	queue = deque([white_cell])
+	visited = set()
+	visited.add(tuple(white_cell))
+
+	while queue:
+		current_cell = queue.popleft()
+
+		# Check if the current cell is grey (occupied)
+		if np.all(grid_occ_map[current_cell[0], current_cell[1]] == (128, 128, 128)):
+			return current_cell
+
+		# Explore neighbors
+		for dx, dy in directions:
+			neighbor = (current_cell[0] + dx, current_cell[1] + dy)
+
+			# Check bounds and if the neighbor is already visited
+			if (0 <= neighbor[0] < grid_occ_map.shape[0] and
+				0 <= neighbor[1] < grid_occ_map.shape[1] and
+				neighbor not in visited):
+				visited.add(neighbor)
+				queue.append(neighbor)
+
+	return None  # No grey cell found

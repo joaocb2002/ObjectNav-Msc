@@ -129,7 +129,21 @@ def kaplan_update(current_belief, likelihood_vec):
 
     return updated
 
+def compute_entropy(belief_vector):
+    """
+    Computes the entropy of a Dirichlet belief vector.
 
+    Parameters:
+        belief_vector (np.ndarray): Current belief vector for a cell (shape: [K+1])
+
+    Returns:
+        float: Entropy of the belief vector
+    """
+    belief_vector = np.clip(belief_vector, 1e-6, None)  # Avoid log(0)
+    total = np.sum(belief_vector)
+    normalized_belief = belief_vector / total
+    entropy = -np.sum(normalized_belief * np.log(normalized_belief))
+    return entropy
 
 
 
