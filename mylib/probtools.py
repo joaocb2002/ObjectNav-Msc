@@ -1,4 +1,3 @@
-from mylib import myutils
 import numpy as np
 from scipy.special import gammaln, psi
 
@@ -17,23 +16,28 @@ def bin_index(scale, bin_vector):
     return bin_index
 
 def compute_likelihood_vector(score_vec, bbox_scale, dirichlet_priors, classes_bins):
-    "Computes the likelihood vector for a given score vector using Dirichlet priors."
+    """
+    Computes the likelihood vector for a given score vector using Dirichlet priors.
+    
+    Parameters:
+        score_vec (np.ndarray): Softmax scores from detection, shape (K,)
+        bbox_scale (float): Scale of the bounding box, used to determine the bin index.
+        dirichlet_priors (dict): Dictionary of Dirichlet priors for each class,
+                                where keys are class names and values are lists of Dirichlet parameters for each bin.
+        classes_bins (dict): Dictionary mapping class names to their corresponding bin vectors.
+    
+    Returns:
+        np.ndarray: Likelihood vector for each class, shape (K,)
+        """
 
     # Initialize the likelihood vector with zeros
     likelihood_vector = []
-    print("\n\n\n\n\n\n")
+
     # Go through each possible indoor class 
     for key in dirichlet_priors:
         
         # Compute the correct bin using the bounding box scale
         bin_idx = bin_index(bbox_scale, classes_bins[key])
-        print(f"Class: {key}, Bin Index: {bin_idx}, Scale: {bbox_scale}", end = ", ")
-        print(f"Bin Vector: {classes_bins[key]}")
-        print(f"Score Vector: {score_vec}")
-        print(f"Score Vector sum: {np.sum(score_vec)}")
-        print(f"Score Vector max value: {np.max(score_vec)}")
-        print(f"Argmax of score vector: {np.argmax(score_vec)}\n\n")
-        print(f"Score Vector mean: {np.mean(score_vec)}")
 
         # Fetch the Dirichlet prior for this class and bin
         alpha = dirichlet_priors[key][bin_idx]
@@ -42,24 +46,17 @@ def compute_likelihood_vector(score_vec, bbox_scale, dirichlet_priors, classes_b
             likelihood_vector.append(0.0)
             continue
 
-        print(f"Dirichlet Prior (alpha): {alpha}")
-        print(f"Alpha sum: {np.sum(alpha)}")
-        print(f"Alpha max value: {np.max(alpha)}")
-        print(f"Argmax of alpha: {np.argmax(alpha)}")
-        print(f"Mean of alpha: {np.mean(alpha)}")
-
         # Compute the likelihood vector for this class, i.e., the probability of score_vec given the prior
-        l_k = scaled_dirichlet_pdf(score_vec, alpha)
-        print(f"Likelihood {l_k}")
-
-        print("\n\n")
+        l_k = dirichlet_pdf(score_vec, alpha)
+        # print(f"Class: {key}, Bin Index: {bin_idx}, Scale: {bbox_scale}", end = ", ")
+        # print(f"Likelihood {l_k}\n")
 
         # Store the likelihood in the vector
         likelihood_vector.append(l_k)
 
-    # Convert to a numpy array and normalize
+    # Convert to a numpy array 
     likelihood_vector = np.array(likelihood_vector)
-    #likelihood_vector /= np.sum(likelihood_vector)
+
     return likelihood_vector
 
 def dirichlet_pdf(x, alpha):
@@ -95,97 +92,48 @@ def dirichlet_pdf(x, alpha):
 
     return np.exp(log_pdf)
 
-def scaled_dirichlet_pdf(x, alpha, scale=5.0):
-    """
-    Compute the scaled Dirichlet PDF at point x for parameters alpha.
-
-    Parameters:
-        x (array-like): K-dimensional probability vector (sum to 1).
-        alpha (array-like): K-dimensional Dirichlet parameters.
-        scale (float): Scaling factor to increase concentration of the distribution.
-
-    Returns:
-        float: Probability density at x.
-    """
-    if alpha is None or len(alpha) == 0:
-        print("Warning: Dirichlet parameters are empty. Returning 0.")
-        return 0.0
-
-    x = np.asarray(x)
-    alpha = np.asarray(alpha) * scale  # Apply scaling to alpha
-
-    if not np.isclose(np.sum(x), 1.0, atol=1e-6):
-        raise ValueError(f"Input vector x must sum to 1. Got sum: {np.sum(x)}")
-    elif np.any(x < 0):
-        raise ValueError("All elements of x must be >= 0.")
-    elif np.any(alpha <= 0):
-        raise ValueError("All alpha parameters must be > 0.")
-    elif np.any((x == 0) & (alpha < 1)):
-        print("Warning: Dirichlet PDF evaluated at zero with alpha < 1. Returning 0.")
-        return 0.0  # avoid undefined behavior for log(0) with alpha < 1
-
-    log_B = np.sum(gammaln(alpha)) - gammaln(np.sum(alpha))
-    log_pdf = -log_B + np.sum((alpha - 1) * np.log(x + 1e-12))  # add small ε to avoid log(0)
-
-    return np.exp(log_pdf)
-
-
-
-
-
-
-
-
-
-def kaplan_update(prior, score_vec, dirichlet_alpha, background_idx=None):
+def kaplan_update(current_belief, likelihood_vec):
     """
     Kaplan fusion update for one belief vector.
     
     Parameters:
-        prior (np.ndarray): Current belief vector (Dirichlet parameters), shape (K+1,)
-        score_vec (np.ndarray): Softmax scores from detection, shape (K,)
-        dirichlet_alpha (np.ndarray): Dirichlet prior for this distance, shape (K,)
-        background_idx (int or None): Index of background class (default is last)
+        likelihood_vec (np.ndarray): Likelihood vector for the current observation, shape (K,)
+        current_belief (np.ndarray): Current belief vector, shape (K,)
     
     Returns:
         np.ndarray: Updated belief vector, same shape as prior
     """
 
-    # Ensure shapes
-    K = len(score_vec)
-    if background_idx is None:
-        background_idx = K  # Assume background is last class
-
     # Small value to prevent division/log errors
     EPS = 1e-6
 
-    # Clamp zeros for stability
-    score_vec = np.clip(score_vec, EPS, 1.0)
-    score_vec = score_vec / np.sum(score_vec)
+    # Sum of product of likelihood and current belief element-wise
+    if likelihood_vec.shape != current_belief.shape:
+        raise ValueError(f"Shape mismatch: likelihood_vec shape {likelihood_vec.shape} and current_belief shape {current_belief.shape} must be the same.")
+    dot_prod = np.sum(likelihood_vec * current_belief)
 
-    # --- Compute log-likelihood for each class ---
-    log_likelihood = []
-    for k in range(K):
-        alpha_k = dirichlet_alpha[k]
-        # Likelihood of score_vec under Dir(alpha_k) (independent approx.)
-        log_likelihood.append(alpha_k * np.log(score_vec[k] + EPS))
-    log_likelihood = np.array(log_likelihood)
+    # Minimum likelihood value
+    min_val = np.min(likelihood_vec)
 
-    # --- Convert to pseudo-likelihood vector ---
-    # Exponentiate and normalize
-    dirichlet_like = np.exp(log_likelihood - np.max(log_likelihood))  # numerical stability
-    dirichlet_like = dirichlet_like * ((1.0 - 1.0 / (K + 1)) / np.sum(dirichlet_like))
-    dirichlet_like = np.append(dirichlet_like, 1.0 / (K + 1))  # add background class
+    # Compute normalization factor to avoid division errors
+    normalization_factor = dot_prod + EPS
 
-    # --- Apply Kaplan update rule ---
-    beta = np.copy(prior)
-    dot_prod = np.sum(dirichlet_like * beta)
-    min_val = np.min(dirichlet_like)
+    # Compute the likelihood ratio term
+    likelihood_ratio = likelihood_vec / normalization_factor
 
-    # Apply the update equation
-    updated = beta * (1 + (dirichlet_like / (dot_prod + EPS)) / (1 + min_val / (dot_prod + EPS)))
+    # Compute the minimum likelihood term
+    min_likelihood_term = min_val / normalization_factor
+
+    # Apply the Kaplan update equation
+    updated = current_belief * (1 + likelihood_ratio) / (1 + min_likelihood_term)
 
     return updated
+
+
+
+
+
+
 
 
 def get_expected_score_vector(belief_vector, epsilon=1e-6):

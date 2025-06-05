@@ -11,9 +11,9 @@ from sklearn.cluster import KMeans
 import heapq
 
 # -----------------------------
-# Display Functions
+# Display Functions - Standard
 # -----------------------------
-def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
+def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_positions, agent_radius, agent_yaw):
     """
     Displays a 4-panel visualization of the agent's simulation state, including:
 
@@ -27,8 +27,8 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_posit
         depth_obs (np.ndarray): Depth image as a 2D array of float distances (in meters).
         topdown_map (np.ndarray): Rendered top-down map image.
         occ_grid_map (np.ndarray): Rendered occupancy grid map image.
-        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
-        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_positions (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
         agent_yaw (float): Agent's yaw angle in degrees.
     """
     fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4, figsize=(16, 4))
@@ -46,8 +46,8 @@ def display_sim_state(rgb_obs, depth_obs, topdown_map, occ_grid_map, agent_posit
     ax2.axis('off')
 
     # Compute the agent position and radius in the top-down map and occupancy grid
-    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
-    topdown_radius, occ_grid_radius = agent_radius_tpl
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions
+    topdown_radius, occ_grid_radius = agent_radius
 
     # Top-down map
     ax3.imshow(topdown_map)
@@ -101,22 +101,22 @@ def display_sim_observations(rgb_obs, depth_obs):
     plt.tight_layout()
     plt.show()
 
-def display_topdown_maps(topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw):
+def display_topdown_maps(topdown_map, occ_grid_map, agent_positions, agent_radius, agent_yaw):
     """
     Displays the top-down map and occupancy grid map with the agent's position and orientation.
 
     Args:
         topdown_map (np.ndarray): Rendered top-down map image.
         occ_grid_map (np.ndarray): Rendered occupancy grid map image.
-        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
-        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_positions (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
         agent_yaw (float): Agent's yaw angle in degrees.
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6, 3))
 
     # Compute the agent position and radius in the top-down map and occupancy grid
-    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
-    topdown_radius, occ_grid_radius = agent_radius_tpl
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions
+    topdown_radius, occ_grid_radius = agent_radius
 
     # Top-down map
     ax1.imshow(topdown_map)
@@ -145,25 +145,25 @@ def display_topdown_maps(topdown_map, occ_grid_map, agent_positions_tpl, agent_r
     plt.tight_layout()
     plt.show()
 
-def display_topdown_maps_with_target(topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw, target_coords_tpl):
+def display_topdown_maps_with_target(topdown_map, occ_grid_map, agent_positions, agent_radius, agent_yaw, target_coords):
     """
     Displays the top-down map and occupancy grid map with the agent's position, orientation, and target position.
 
     Args:
         topdown_map (np.ndarray): Rendered top-down map image.
         occ_grid_map (np.ndarray): Rendered occupancy grid map image.
-        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
-        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_positions (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
         agent_yaw (float): Agent's yaw angle in degrees.
-        target_coords_tpl (tuple): Tuple containing the target position in the top-down map and occupancy grid.
+        target_coords (tuple): Tuple containing the target position in the top-down map and occupancy grid.
 
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6, 3))
 
     # Compute the agent position and radius in the top-down map and occupancy grid
-    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
-    topdown_radius, occ_grid_radius = agent_radius_tpl
-    real_target_pos, computed_target_pos = target_coords_tpl
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions
+    topdown_radius, occ_grid_radius = agent_radius
+    real_target_pos, computed_target_pos = target_coords
 
     # Top-down map
     ax1.imshow(topdown_map)
@@ -210,31 +210,31 @@ def display_topdown_maps_with_target(topdown_map, occ_grid_map, agent_positions_
     ax2.plot([target_pos_grid[1] - occ_grid_radius*2/3, target_pos_grid[1] + occ_grid_radius*2/3],
         [target_pos_grid[0] - occ_grid_radius*2/3, target_pos_grid[0] + occ_grid_radius*2/3], color='green')
     
-    
-
-
     plt.tight_layout()
     plt.show()
 
-def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_positions_tpl, agent_radius_tpl, agent_yaw, cluster_map, cluster_num, cluster_centers):
+
+# -----------------------------
+# Display Functions - Baseline
+# -----------------------------
+def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_positions, agent_radius, agent_yaw, cluster_map, cluster_centers):
     """
     Displays the top-down map and occupancy grid map with the agent's position and orientation.
 
     Args:
         topdown_map (np.ndarray): Rendered top-down map image.
         occ_grid_map (np.ndarray): Rendered occupancy grid map image.
-        agent_positions_tpl (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
-        agent_radius_tpl (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_positions (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
         agent_yaw (float): Agent's yaw angle in degrees.
         cluster_map (dict): Mapping from (x, y) tuple to cluster index.
-        cluster_num (int): The number of clusters.
         cluster_centers (list): List of cluster centers.
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6, 3))
 
     # Compute the agent position and radius in the top-down map and occupancy grid
-    (map_x, map_y), (grid_x, grid_y) =  agent_positions_tpl
-    topdown_radius, occ_grid_radius = agent_radius_tpl
+    (map_x, map_y), (grid_x, grid_y) =  agent_positions
+    topdown_radius, occ_grid_radius = agent_radius
 
     # Top-down map
     ax1.imshow(topdown_map)
@@ -254,15 +254,15 @@ def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_position
         ax2.axvline(x=j-0.5, color='black', linewidth=0.5)
 
     # Plot each cluster with a different color in occupancy grid
-    for i in range(cluster_num):
+    for i in range(len(cluster_centers)):
         cluster_coords = [coord for coord, label in cluster_map.items() if label == i]
         if cluster_coords:
             x_coords, y_coords = zip(*cluster_coords)
-            ax2.scatter(y_coords, x_coords, label=f'Cluster {i}', alpha=0.4)
+            ax2.scatter(y_coords, x_coords, label=f'Cluster {i}', alpha=0.2)
 
     # Plot cluster centers
     for i, center in enumerate(cluster_centers):
-        ax2.scatter(center[1], center[0], marker='x', color='black', s=100, label=f'Center {i}')
+        ax2.scatter(center[1], center[0], marker='x', color='black', s=100, label=f'Center {i}', alpha=0.5)
 
     # Draw the agent position and orientation on the top-down map and occupancy grid
     agent_yaw = math.radians(agent_yaw)
@@ -303,10 +303,26 @@ def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, age
     ax2.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
     ax2.axis('off')
 
-    # Entropy map
-    ax3.imshow(entropy_map, cmap='hot')
-    ax3.set_title('entropy map')
-    ax3.axis('off')
+
+
+    # Mask the zero entries
+    masked_entropy = np.ma.masked_where(entropy_map == 0, entropy_map)
+
+    # Create a custom colormap: white for masked, 'Reds' for entropy values
+    cmap = plt.cm.Reds
+    cmap.set_bad(color='white')  # Masked (zero) values appear white
+
+    # Plotting
+    fig, ax = plt.subplots()
+    img = ax.imshow(masked_entropy, cmap=cmap, interpolation='nearest')
+    ax.set_title('Entropy Map')
+    ax.axis('off')
+
+    # Add a colorbar for the entropy scale
+    cbar = fig.colorbar(img, ax=ax)
+    cbar.set_label('Entropy')
+
+    plt.show()
 
     # Black grid lines
     rows, cols = occ_grid_map.shape[:2]
@@ -387,7 +403,7 @@ def save_rgb_camera_intrinsics(sensor_spec):
         "hfov": hfov
     }
 
-    intrinsics_file = "camera_intrinsics.json"
+    intrinsics_file = "camera-intrinsics.json"
     with open(intrinsics_file, "w") as f:
         json.dump(intrinsics, f, indent=4)
 
