@@ -30,8 +30,11 @@ def compute_likelihood_vector(score_vec, bbox_scale, dirichlet_priors, classes_b
         np.ndarray: Likelihood vector for each class, shape (K,)
         """
 
-    # Initialize the likelihood vector with zeros
+    # Initialize the likelihood vector
     likelihood_vector = []
+
+    # Number of classes
+    K = len(dirichlet_priors)
 
     # Go through each possible indoor class 
     for key in dirichlet_priors:
@@ -54,8 +57,16 @@ def compute_likelihood_vector(score_vec, bbox_scale, dirichlet_priors, classes_b
         # Store the likelihood in the vector
         likelihood_vector.append(l_k)
 
-    # Convert to a numpy array 
+    # Normalize the likelihood vector
     likelihood_vector = np.array(likelihood_vector)
+    likelihood_vector /= np.sum(likelihood_vector)
+
+    # Multiply every element by K/(K+1)
+    likelihood_vector *= K / (K + 1)
+
+    # Append a new element for the "background" class with 1/(K + 1)
+    background_likelihood = 1 / (K + 1)
+    likelihood_vector = np.append(likelihood_vector, background_likelihood)
 
     return likelihood_vector
 
@@ -144,67 +155,5 @@ def compute_entropy(belief_vector):
     normalized_belief = belief_vector / total
     entropy = -np.sum(normalized_belief * np.log(normalized_belief))
     return entropy
-
-
-
-
-
-
-def get_expected_score_vector(belief_vector, epsilon=1e-6):
-    """
-    Converts a Dirichlet belief vector into a normalized expected score vector.
-
-    Parameters:
-        belief_vector (np.ndarray): Current belief vector for a cell (shape: [K+1])
-        epsilon (float): Small value to avoid division by zero
-
-    Returns:
-        np.ndarray: Normalized expected probability vector (shape: [K+1])
-    """
-    belief_vector = np.clip(belief_vector, epsilon, None)
-    expected_scores = belief_vector / np.sum(belief_vector)
-    return expected_scores
-
-def kl_dirichlet(p, q):
-    """
-    Computes the KL divergence between two Dirichlet distributions p and q.
-
-    Parameters:
-        p (np.ndarray): Dirichlet parameters (belief before)
-        q (np.ndarray): Dirichlet parameters (belief after)
-
-    Returns:
-        float: KL divergence D_KL(q || p)
-    """
-    p = np.clip(p, 1e-6, None)
-    q = np.clip(q, 1e-6, None)
-
-    p0 = np.sum(p)
-    q0 = np.sum(q)
-
-    kl = gammaln(q0) - gammaln(p0)
-    kl -= np.sum(gammaln(q)) - np.sum(gammaln(p))
-    kl += np.sum((q - p) * (psi(q) - psi(q0)))
-
-    return kl
-
-def compute_total_kl(simulated_map, current_map):
-    """
-    Computes the total KL divergence between two belief maps.
-
-    Parameters:
-        simulated_map (list of list of np.ndarray): Simulated belief map (Dirichlet per cell)
-        current_map (list of list of np.ndarray): Current belief map (Dirichlet per cell)
-
-    Returns:
-        float: Total KL divergence across all cells
-    """
-    total_kl = 0.0
-    for i in range(len(current_map)):
-        for j in range(len(current_map[0])):
-            p = current_map[i][j]
-            q = simulated_map[i][j]
-            total_kl += kl_dirichlet(p, q)
-    return total_kl
 
 

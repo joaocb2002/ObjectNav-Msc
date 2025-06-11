@@ -4,12 +4,21 @@ from scipy.spatial.transform import Rotation as R
 from habitat.utils.visualizations import maps
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from PIL import Image
 import math
 import json
 from sklearn.cluster import KMeans
 import heapq
 from collections import deque
+from skimage.draw import line
+
+# -----------------------------
+# Constants
+# -----------------------------
+#MAX_ENTROPY = 3.29584 # 27 classes
+MAX_ENTROPY = 3.33220 # 27 classses + background
+MIN_ENTROPY = 2.5
 
 # -----------------------------
 # Display Functions - Standard
@@ -282,7 +291,7 @@ def display_topdown_maps_with_clusters(topdown_map, occ_grid_map, agent_position
 # -----------------------------
 # Display Functions - Dirichlet
 # -----------------------------
-def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, agent_positions, agent_radius, agent_yaw):
+def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, cluster_map, cluster_centers, agent_positions, agent_radius, agent_yaw):
     """
     Displays the top-down map and occupancy grid map with the agent's position and orientation. 
     Also displays the entropy map.
@@ -292,6 +301,8 @@ def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, age
         occ_grid_map (np.ndarray): Rendered occupancy grid map image.
         entropy_map (np.ndarray): 2D array representing the entropy map.
         agent_positions (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        cluster_map (dict): Mapping from (x, y) tuple to cluster index.
+        cluster_centers (list): List of cluster centers.
         agent_radius (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
         agent_yaw (float): Agent's yaw angle in degrees.
     """
@@ -311,17 +322,32 @@ def display_topdown_and_entropy_maps(topdown_map, occ_grid_map, entropy_map, age
     ax2.set_title('occupancy grid (Z, X): [{:.0f}, {:.0f}]'.format(grid_x, grid_y))
     ax2.axis('off')
 
+    # Plot each cluster with a different color in occupancy grid
+    for i in range(len(cluster_centers)):
+        cluster_coords = [coord for coord, label in cluster_map.items() if label == i]
+        if cluster_coords:
+            x_coords, y_coords = zip(*cluster_coords)
+            ax2.scatter(y_coords, x_coords, label=f'Cluster {i}', alpha=0.2)
+
+    # Plot cluster centers
+    for i, center in enumerate(cluster_centers):
+        ax2.scatter(center[1], center[0], marker='x', color='black', s=100, label=f'Center {i}', alpha=0.5)
+
     # Mask the zero entries
     masked_entropy = np.ma.masked_where(entropy_map == 0, entropy_map)
 
-    # Create a custom colormap: white for masked, 'Reds' for entropy values
-    cmap = plt.cm.Reds
-    cmap.set_bad(color='white')  # Masked (zero) values appear white
+    # Modify 'Reds' to avoid starting at white
+    reds = plt.cm.get_cmap('Reds', 256)
+    new_colors = reds(np.linspace(0.2, 1, 256))  # Start at 0.2 to avoid white
+    custom_cmap = mcolors.ListedColormap(new_colors)
+    custom_cmap.set_bad(color='white')  # Keep masked values white
 
-    # Compute maximum entropy value
+    # Compute maximum entropy value in the masked entropy map
+    max_entropy_value = max(np.max(masked_entropy), MAX_ENTROPY)
+    min_entropy_value = min(np.min(masked_entropy), MIN_ENTROPY)
 
     # Add a colorbar for the entropy scale
-    img = ax3.imshow(masked_entropy, cmap=cmap, interpolation='nearest', vmin=2.0, vmax=3.5)
+    img = ax3.imshow(masked_entropy, cmap=custom_cmap, interpolation='nearest', vmin=min_entropy_value, vmax=max_entropy_value)
     ax3.set_title('Entropy Map')
     ax3.axis('off')
     cbar = fig.colorbar(img, ax=ax3)
@@ -425,89 +451,110 @@ def get_class_color(class_id):
     color = np.random.randint(0, 255, size=3).tolist()
     return (int(color[0]), int(color[1]), int(color[2]), 255)  # RGBA
 
-def merge_rgb_yolo_outputs(rgb, xyxy, cls, conf, names):
+def merge_rgb_yolo_outputs(rgb, detections):
     """
-    Merge YOLO outputs with RGB image. In place modification of the RGB image.
+    Merge YOLO detections with an RGB image by drawing boxes and labels in-place.
+
     Args:
         rgb (np.ndarray): RGB image.
-        xyxy (np.ndarray): Bounding box coordinates.
-        cls (np.ndarray): Class IDs.
-        conf (np.ndarray): Confidence scores.
-        names (list): List of class names.
+        detections (List[Dict]): List of detection dicts with keys:
+            'box', 'class_id', 'confidence', 'name', 'prob_vector'
     """
-    for i in range(len(xyxy)):
-        # Extract data
-        box = xyxy[i].astype(int)
-        class_id = int(cls[i])
-        confidence = conf[i][0]
-        label = f"{names[class_id]} {confidence:.2f}"
+    for det in detections:
+        box = det['box']
+        class_id = det['class_id']
+        confidence = det['confidence']
+        label = f"{det['name']} {confidence:.2f}"
 
-        # Get color for the class
         color = get_class_color(class_id)
 
-        # Draw rectangle
+        # Draw bounding box
         cv2.rectangle(rgb, (box[0], box[1]), (box[2], box[3]), color, 2)
 
-        # Put label background
+        # Label background
         (text_width, text_height), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1, 1)
-        cv2.rectangle(rgb, 
-                    (box[0], box[1] - text_height - baseline), 
-                    (box[0] + text_width, box[1]), 
-                    color, -1)
+        cv2.rectangle(rgb,
+                      (box[0], box[1] - text_height - baseline),
+                      (box[0] + text_width, box[1]),
+                      color, -1)
 
-        # Text color
+        # Text color (white if background is dark, black if light)
         text_color = (255, 255, 255, 255) if sum(color) < 382 else (0, 0, 0, 255)
 
-        # Put label text
-        cv2.putText(rgb, label, (box[0], box[1] - baseline), 
+        # Label text
+        cv2.putText(rgb, label, (box[0], box[1] - baseline),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, text_color, 1)
 
-def parse_detection_results(results):
+def parse_yolo_detections(results):
     """
-    Extract detection outputs from YOLO-like model results.
+    Parses YOLO-like detection results into a list of structured detection dictionaries.
 
     Args:
-        results: List of detection results (e.g., from Ultralytics YOLOv8).
+        results: List of detection results from YOLO (e.g., Ultralytics YOLOv11).
 
     Returns:
-        tuple: (xyxy, conf, cls, prob_vectors, names)
-            - xyxy: ndarray of shape (N, 4), bounding boxes in [x1, y1, x2, y2] format
-            - conf: ndarray of shape (N,), confidence scores
-            - cls: ndarray of shape (N,), class IDs
-            - prob_vectors: ndarray of shape (N, num_classes), per-class probabilities
-            - names: list or dict of class names
-            - num_detections: int, number of detections
+        List[Dict]: A list where each element contains:
+            - 'box': Bounding box as int ndarray [x1, y1, x2, y2]
+            - 'class_id': Integer class ID
+            - 'name': Class name
+            - 'confidence': Detection confidence (float)
+            - 'prob_vector': Class probability distribution (np.ndarray)
     """
-    result = results[0]  # One image, one result
+    result = results[0]  # Single image inference assumed
 
-    xyxy = result.boxes.xyxy.cpu().numpy()         # (N, 4)
-    conf = result.boxes.conf.cpu().numpy()         # (N,)
-    cls = result.boxes.cls.cpu().numpy()           # (N,)
+    boxes = result.boxes.xyxy.cpu().numpy()         # (N, 4)
+    confs = result.boxes.conf.cpu().numpy()         # (N,)
+    class_ids = result.boxes.cls.cpu().numpy()      # (N,)
     prob_vectors = result.boxes.data[:, 6:].cpu().numpy()  # (N, num_classes)
-    names = result.names                           # class names
-    num_detections = len(xyxy)                    # number of detections
+    names = result.names                             # ID-to-name map (list or dict)
 
-    return xyxy, conf, cls, prob_vectors, names, num_detections
+    detections = []
+    for i in range(len(boxes)):
+        detections.append({
+            'box': boxes[i].astype(int),
+            'class_id': int(class_ids[i]),
+            'name': names[int(class_ids[i])],
+            'confidence': float(confs[i][0]),
+            'prob_vector': prob_vectors[i]
+        })
 
+    return detections
+
+def get_box_center(box):
+    """
+    Computes the integer coordinates of the center point of a bounding box.
+
+    Args:
+        box (Iterable[int]): Bounding box in (x1, y1, x2, y2) format,
+                             where (x1, y1) is the top-left and (x2, y2) is the bottom-right corner.
+
+    Returns:
+        Tuple[int, int]: (center_x, center_y), the integer pixel coordinates of the box center.
+    """
+    x1, y1, x2, y2 = box
+    return int((x1 + x2) / 2), int((y1 + y2) / 2)
 
 # -----------------------------
 # Simulation Functions
 # -----------------------------
-def was_object_found(object_id, found_objects_ids, confidences, bboxes, threshold=0.80):
+def was_target_found(object_id, detections, threshold=0.80):
     """
-    Check if an object was found based on its ID and confidence score and return its bounding box.
+    Check if the target object was found in the detection results.
+
     Args:
-        object_id (int): The ID of the object to check.
-        found_objects_ids (list): List of found object IDs.
-        confidences (list): List of confidence scores for the found objects.
-        bboxes (list): List of bounding boxes for the found objects.
-        threshold (float): Confidence threshold for considering an object as found.
+        object_id (int): The ID of the target object to check.
+        detections (List[Dict]): List of detection dicts with keys:
+            'class_id', 'confidence', 'box', etc.
+        threshold (float): Confidence threshold to consider a detection valid.
+
+    Returns:
+        Tuple[bool, np.ndarray or None]: (True, bbox) if found, else (False, None)
     """
-    for i in range(len(found_objects_ids)):
-        class_id = int(found_objects_ids[i])
-        confidence = confidences[i][0]
+    for det in detections:
+        class_id = det['class_id']
+        confidence = det['confidence']
         if class_id == object_id and confidence >= threshold:
-            return True, bboxes[i]
+            return True, det['box']
 
     return False, None
 
@@ -881,7 +928,7 @@ def compute_rotation_action(current_rotation, desired_rotation):
     else:
         raise ValueError("Invalid rotation difference")
 
-def compute_move_action_relative(current_pos, next_pos, current_rotation):
+def compute_relative_move_action(current_pos, next_pos, current_rotation):
     """
     Returns a relative move action from current_pos to next_pos
     based on current_rotation.
@@ -985,3 +1032,64 @@ def get_closest_grey_cell(white_cell, grid_occ_map):
 				queue.append(neighbor)
 
 	return None  # No grey cell found
+
+
+# -----------------------------
+# Visibility Functions
+# -----------------------------
+def compute_visible_rays(grid_map, agent_pos, agent_yaw_deg, hfov_deg, num_rays=100, ray_length=None):
+    """
+    Computes visible rays using Bresenham raycasting with internal ownership resolution.
+
+    Args:
+        grid_map (np.ndarray): 2D occupancy grid map.
+        agent_pos (tuple): (z, x) position of the agent in grid coordinates.
+        agent_yaw_deg (float): Yaw of the agent in degrees (0 = up).
+        hfov_deg (float): Horizontal field of view in degrees.
+        num_rays (int): Number of rays to cast.
+        ray_length (float): Maximum length of rays (defaults to map diagonal).
+
+    Returns:
+        rays (list): List of rays, each a list of (z, x) cells that are uniquely owned by the ray.
+    """
+    Z, X = grid_map.shape[:2]
+    rays = []
+    ownership = {}
+
+    agent_yaw = np.radians(agent_yaw_deg)
+    hfov_rad = np.radians(hfov_deg)
+    angles = np.linspace(agent_yaw - hfov_rad / 2, agent_yaw + hfov_rad / 2, num_rays)
+
+    if ray_length is None:
+        ray_length = np.hypot(Z, X)
+
+    agent_zf, agent_xf = float(agent_pos[0]), float(agent_pos[1])
+    agent_z, agent_x = int(round(agent_zf)), int(round(agent_xf))
+
+    # First pass: determine closest owner for each cell
+    for i, angle in enumerate(angles):
+        end_z = agent_zf - ray_length * np.cos(angle)
+        end_x = agent_xf - ray_length * np.sin(angle)
+        end_zi, end_xi = int(round(end_z)), int(round(end_x))
+
+        rr, cc = line(agent_z, agent_x, end_zi, end_xi)
+
+        for zi, xi in zip(rr, cc):
+            if 0 <= zi < Z and 0 <= xi < X:
+                cell = (zi, xi)
+                dist = np.hypot(zi - agent_zf, xi - agent_xf)
+
+                if cell not in ownership or dist < ownership[cell][1]:
+                    ownership[cell] = (i, dist)
+            else:
+                break
+
+    # Second pass: build per-ray list of owned cells
+    rays = [[] for _ in range(num_rays)]
+
+    for cell, (owner_idx, _) in ownership.items():
+        rays[owner_idx].append(cell)
+
+    return rays
+
+
