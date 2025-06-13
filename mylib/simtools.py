@@ -436,6 +436,19 @@ def save_rgb_camera_intrinsics(sensor_spec):
     with open(intrinsics_file, "w") as f:
         json.dump(intrinsics, f, indent=4)
 
+def get_camera_pos_from_agent_pos(agent_pos, camera_height):
+    """
+    Computes the camera position based on the agent's position and the camera height.
+
+    Args:
+        agent_pos (list): Agent's position [x, y, z].
+        camera_height (float): Height of the camera above the agent's position.
+
+    Returns:
+        list: Camera position [x, y, z].
+    """
+    return [agent_pos[0], agent_pos[1]+camera_height, agent_pos[2]]
+
 # -----------------------------
 # YOLO Utils Functions
 # -----------------------------
@@ -571,7 +584,7 @@ def compute_travelled_distance(start_pos, end_pos):
     """
     return np.linalg.norm(np.array(start_pos) - np.array(end_pos))
 
-def compute_real_world_position(agent_pos, agent_rot, depth_obs, x_cam, y_cam, camera_intrinsics):
+def compute_real_world_position_from_pixel(agent_pos, agent_rot, depth_obs, x_cam, y_cam, camera_intrinsics):
     """
     Compute the real-world position of an object in the environment based on the agent's position, rotation, and depth and RGB observations.
 
@@ -611,6 +624,51 @@ def compute_real_world_position(agent_pos, agent_rot, depth_obs, x_cam, y_cam, c
     P_w = np.dot(Rot, P_c) + np.array(agent_pos)
     
     return P_w
+
+def compute_pixel_from_real_world_position(agent_pos, agent_rot, real_world_pos, camera_intrinsics):
+    """
+    Compute the pixel coordinates in the camera image from a real-world position.
+
+    Args:
+        agent_pos (list): Agent's position [x, y, z].
+        agent_rot (list): Agent's rotation quaternion [x, y, z, w].
+        real_world_pos (list or np.ndarray): Real-world position [x, y, z] of the object.
+        camera_intrinsics (dict): Camera intrinsics containing fx, fy, cx, cy.
+
+    Returns:
+        tuple: Pixel coordinates (x_cam, y_cam) in the image.
+    """
+    # Unpack camera intrinsics
+    fx = camera_intrinsics["fx"]
+    fy = camera_intrinsics["fy"]
+    cx = camera_intrinsics["cx"]
+    cy = camera_intrinsics["cy"]
+
+    # Unpack agent rotation quaternion
+    q_w = agent_rot.w
+    q_x = agent_rot.x
+    q_y = agent_rot.y
+    q_z = agent_rot.z
+
+    # Compute inverse rotation matrix
+    rot_mat = R.from_quat([q_x, q_y, q_z, q_w]).as_matrix()
+    rot_inv = rot_mat.T  # Inverse of rotation matrix is its transpose
+
+    # Convert real-world position to camera coordinate frame
+    P_w = np.array(real_world_pos)
+    T = np.array(agent_pos)
+    P_c = np.dot(rot_inv, (P_w - T))
+    X_c, Y_c, Z_c = P_c
+
+    # Guard against division by zero
+    if Z_c == 0:
+        Z_c = 1e-6  # Small value to avoid division by zero
+
+    # Project to image plane
+    x_cam = int(round((X_c * fx) / -Z_c + cx))
+    y_cam = int(round((Y_c * fy) / -Z_c + cy))
+
+    return (x_cam, y_cam)
 
 def compute_closeness(real_pos, computed_pos):
     """
@@ -1037,36 +1095,39 @@ def get_closest_grey_cell(white_cell, grid_occ_map):
 # -----------------------------
 # Visibility Functions
 # -----------------------------
-def compute_visible_rays(grid_map, agent_pos, agent_yaw_deg, hfov_deg, num_rays=100, ray_length=None):
+def simulate_visibility_rays(grid_map, agent_grid_position, agent_yaw_deg, hfov_deg=90, num_rays=100, ray_length=None):
     """
-    Computes visible rays using Bresenham raycasting with internal ownership resolution.
-
+    Casts visibility rays from the agent's position and orientation on the grid map, determining visible cells. 
+    Each ray owns the closest cells it intersects, and rays are returned in index order. 
+    
     Args:
-        grid_map (np.ndarray): 2D occupancy grid map.
-        agent_pos (tuple): (z, x) position of the agent in grid coordinates.
-        agent_yaw_deg (float): Yaw of the agent in degrees (0 = up).
+        grid_map (np.ndarray): The occupancy grid map.
+        agent_grid_position (tuple): The agent's position in the grid (z, x).
+        agent_yaw_deg (float): The agent's yaw orientation in degrees.
         hfov_deg (float): Horizontal field of view in degrees.
         num_rays (int): Number of rays to cast.
-        ray_length (float): Maximum length of rays (defaults to map diagonal).
-
-    Returns:
-        rays (list): List of rays, each a list of (z, x) cells that are uniquely owned by the ray.
+        ray_length (float, optional): Length of each ray. If None, it will be computed based on the grid size.
     """
+    # Agent position and radius
+    grid_x, grid_y = agent_grid_position
+
+    # Initialize variables
     Z, X = grid_map.shape[:2]
     rays = []
     ownership = {}
 
-    agent_yaw = np.radians(agent_yaw_deg)
+    # Angle calculations
+    agent_yaw_rad = np.radians(agent_yaw_deg)
     hfov_rad = np.radians(hfov_deg)
-    angles = np.linspace(agent_yaw - hfov_rad / 2, agent_yaw + hfov_rad / 2, num_rays)
+    angles = np.linspace(agent_yaw_rad - hfov_rad / 2, agent_yaw_rad + hfov_rad / 2, num_rays)
 
     if ray_length is None:
         ray_length = np.hypot(Z, X)
 
-    agent_zf, agent_xf = float(agent_pos[0]), float(agent_pos[1])
+    agent_zf, agent_xf = float(grid_x), float(grid_y)
     agent_z, agent_x = int(round(agent_zf)), int(round(agent_xf))
 
-    # First pass: determine closest owner for each cell
+    # First pass: determine closest ray owner for each cell
     for i, angle in enumerate(angles):
         end_z = agent_zf - ray_length * np.cos(angle)
         end_x = agent_xf - ray_length * np.sin(angle)
@@ -1092,4 +1153,87 @@ def compute_visible_rays(grid_map, agent_pos, agent_yaw_deg, hfov_deg, num_rays=
 
     return rays
 
+def compute_visible_occ_cells(rays, grid_map, depth_map, grid_cells, world_positions, agent_grid_position, agent_rot, agent_yaw_deg, agent_radius, scene_height=3.0, agent_height=1.5, intrinsics=None):
+    """
+    Computes the visible occupancy cells from the agent's position and orientation in the grid map.
+
+    Args:
+        rays (list): List of rays, where each ray is a list of cells it owns.
+        grid_map (np.ndarray): The occupancy grid map.
+        depth_map (np.ndarray): The depth map corresponding to the grid map.
+        agent_grid_position (tuple): The agent's position in the grid (z, x).
+        agent_yaw_deg (float): The agent's yaw orientation in degrees.
+        agent_radius (tuple): Agent radius in topdown and grid maps.
+
+    """
+
+    # Agent radius and grid position
+    grid_x, grid_y = agent_grid_position
+    occ_grid_radius = agent_radius[1]  # Use the radius for the occupancy grid
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    # Display the occupancy grid map
+    ax.imshow(grid_map)
+    ax.set_title('Occupancy Grid Map with Visible Cells')
+    ax.axis('off')
+
+    # Draw agent
+    agent_yaw_rad = math.radians(agent_yaw_deg)
+    ax.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius * 2 / 3, color="red", fill=True))
+    ax.add_patch(plt.Arrow(
+        grid_y, grid_x,
+        -occ_grid_radius * np.sin(agent_yaw_rad),
+        -occ_grid_radius * np.cos(agent_yaw_rad),
+        width=occ_grid_radius / 2,
+        color="black"
+    ))
+
+    # Compute agent position in real world coordinates
+    idx = grid_cells.index(list(agent_grid_position))
+    agent_pos = world_positions[idx]
+
+    # Draw visible cells (all in the same color)
+    for ray in rays:
+        for z, x in ray:
+            # Find the index of the cell in grid_free_cells
+            idx = grid_cells.index([z, x])
+            real_world_position = world_positions[idx]
+            
+            # Compute distance from the agent to the cell in real world coordinates
+            cell_pos = np.array(real_world_position)
+            distance = np.linalg.norm(agent_pos - cell_pos)
+
+            # Initialize depth value for the cell
+            depth_values = []   
+
+            # Verify depth for that cell
+            vertical_step = np.linspace(0, scene_height, 20)
+
+            for step in vertical_step:
+                # Define the cell world position at the current height step
+                cell_world_pos = np.array([real_world_position[0], step, real_world_position[2]])
+
+                # Compute pixel from real world coordinates
+                camera_pos = get_camera_pos_from_agent_pos(agent_pos, agent_height)
+                pixel_x, pixel_y = compute_pixel_from_real_world_position(camera_pos, agent_rot, cell_world_pos, intrinsics)
+
+                # Check if pixel is within bounds of the depth map
+                if pixel_x < 0 or pixel_x >= depth_map.shape[1] or pixel_y < 0 or pixel_y >= depth_map.shape[0]:
+                    continue  # Skip if pixel is out of bounds
+                else:
+                    depth_values.append(depth_map[pixel_y, pixel_x])
+
+            # Compute the average depth value for the cell
+            if depth_values:
+                depth_value = np.mean(depth_values)
+            else:
+                depth_value = float('-Inf')
+
+            if depth_value < distance or depth_value == float('-Inf'):
+                break   
+
+            ax.add_patch(plt.Rectangle((x - 0.5, z - 0.5), 1, 1, color='yellow', alpha=0.4))
+
+    plt.tight_layout()
+    plt.show()
 
