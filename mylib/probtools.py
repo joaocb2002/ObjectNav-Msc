@@ -1,6 +1,9 @@
 import numpy as np
 from scipy.special import gammaln, psi
 
+# Constants
+FN_RATE = 0.3283 # Learned from calibration data
+
 def bin_index(scale, bin_vector):
     """
     Computes the bin index for a given scale and bin vector.
@@ -156,4 +159,30 @@ def compute_entropy(belief_vector):
     entropy = -np.sum(normalized_belief * np.log(normalized_belief))
     return entropy
 
+def compute_background_likelihood_vector(distance, num_classes, alpha=1.0):
+    """
+    Computes the background likelihood vector for an empty cell based on distance.
 
+    Parameters:
+        distance (float): Distance to the cell.
+        num_classes (int): Number of classes, default is 1.
+        alpha (float): Hyperparameter for the exponential decay, default is 0.1.
+
+    Returns:
+        np.ndarray: Background likelihood vector for the empty cell.
+    """
+    # Initialize the background likelihood vector
+    background_likelihood_vector = np.zeros(num_classes + 1)
+
+    # Compute the likelihood based on distance
+    # value = alpha*np.exp(-alpha*distance)*(1 - FN_RATE)
+    value = 1
+
+    # Set the background likelihood for the empty cell
+    background_likelihood_vector[-1] = value
+
+    # Set the likelihood for the other classes
+    value = (1 - value) / num_classes
+    background_likelihood_vector[:-1] = value
+
+    return background_likelihood_vector

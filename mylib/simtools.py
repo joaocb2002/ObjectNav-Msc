@@ -18,7 +18,7 @@ from skimage.draw import line
 # -----------------------------
 #MAX_ENTROPY = 3.29584 # 27 classes
 MAX_ENTROPY = 3.33220 # 27 classses + background
-MIN_ENTROPY = 2.5
+MIN_ENTROPY = 3.30
 
 # -----------------------------
 # Display Functions - Standard
@@ -405,6 +405,60 @@ def compute_entropy_map(belief_map, occ_grid_map, free_color=(255, 255, 255)):
 
     return entropy_map
 
+def compute_average_entropy(belief_map, grid_cells):
+    """
+    Computes the average entropy of a list of grid cells.
+
+    Args:
+        belief_map (list of list of np.ndarray): Dirichlet belief map.
+        grid_cells (list): List of grid cells, where each cell is a numpy array representing the Dirichlet distribution.
+
+    Returns:
+        float: Average entropy across all grid cells.
+    """
+    total_entropy = 0.0
+    count = 0
+
+    for cell in grid_cells:
+        x, y = cell
+        if belief_map[x][y] is not None:
+            alphas = belief_map[x][y]
+            alphas = np.clip(alphas, 1e-6, None)  # Avoid division by zero
+            probs = alphas / np.sum(alphas)
+            entropy = -np.sum(probs * np.log(probs + 1e-10))  # Add small value to avoid log(0)
+            total_entropy += entropy
+            count += 1
+
+    if count == 0:
+        return 0.0
+    
+    return total_entropy / count
+
+def compute_max_target_probability(belief_map, grid_cells, target_class_idx):
+    """
+    Computes the maximum probability of a target class across a list of grid cells.
+
+    Args:
+        belief_map (list of list of np.ndarray): Dirichlet belief map.
+        grid_cells (list): List of grid cells, where each cell is a tuple (x, y).
+        target_class_idx (int): Index of the target class in the Dirichlet distribution.
+
+    Returns:
+        float: Maximum probability of the target class across all grid cells.
+    """
+    max_prob = 0.0
+
+    for cell in grid_cells:
+        x, y = cell
+        if belief_map[x][y] is not None:
+            alphas = belief_map[x][y]
+            alphas = np.clip(alphas, 1e-6, None)  # Avoid division by zero
+            prob = alphas[target_class_idx] / np.sum(alphas)
+            max_prob = max(max_prob, prob)
+
+    return max_prob
+
+
 # -----------------------------
 # Sensor Functions
 # -----------------------------
@@ -548,7 +602,7 @@ def get_box_center(box):
     return int((x1 + x2) / 2), int((y1 + y2) / 2)
 
 # -----------------------------
-# Simulation Functions
+# Metrics Functions
 # -----------------------------
 def was_target_found(object_id, detections, threshold=0.80):
     """
@@ -584,6 +638,23 @@ def compute_travelled_distance(start_pos, end_pos):
     """
     return np.linalg.norm(np.array(start_pos) - np.array(end_pos))
 
+def compute_closeness(real_pos, computed_pos):
+    """
+    Compute the closeness between two positions in 2D space.
+    Args:
+        real_pos (list): Real-world position [x, y, z].
+        computed_pos (list): Computed position [x, y, z].
+    Returns:
+        float: The Euclidean distance between the two positions, using only x and z coordinates.
+    """
+    real_pos_2d = np.array([real_pos[0], real_pos[2]])
+    computed_pos_2d = np.array([computed_pos[0], computed_pos[2]])
+    return np.linalg.norm(real_pos_2d - computed_pos_2d)
+
+
+# -----------------------------
+# Real world - Camera Mapping Functions
+# -----------------------------
 def compute_real_world_position_from_pixel(agent_pos, agent_rot, depth_obs, x_cam, y_cam, camera_intrinsics):
     """
     Compute the real-world position of an object in the environment based on the agent's position, rotation, and depth and RGB observations.
@@ -670,19 +741,10 @@ def compute_pixel_from_real_world_position(agent_pos, agent_rot, real_world_pos,
 
     return (x_cam, y_cam)
 
-def compute_closeness(real_pos, computed_pos):
-    """
-    Compute the closeness between two positions in 2D space.
-    Args:
-        real_pos (list): Real-world position [x, y, z].
-        computed_pos (list): Computed position [x, y, z].
-    Returns:
-        float: The Euclidean distance between the two positions, using only x and z coordinates.
-    """
-    real_pos_2d = np.array([real_pos[0], real_pos[2]])
-    computed_pos_2d = np.array([computed_pos[0], computed_pos[2]])
-    return np.linalg.norm(real_pos_2d - computed_pos_2d)
 
+# -----------------------------
+# Action Functions
+# -----------------------------
 def is_position_valid(position, grid_occ_positions):
     """
     Check if the position is valid based on the occupancy grid.
@@ -834,43 +896,38 @@ def get_cluster_centers(cluster_map, cluster_num):
 
     return cluster_centers
 
-def get_closest_cluster_center_navmesh(agent_pos, world_cluster_centers, pathfinder):
+def assign_cluster_centers_to_cells(grid_occ_cells, cluster_centers):
     """
-    Get the closest cluster center to the agent's position.
+    Assigns each occupied cell to the nearest cluster center.
 
     Args:
-        agent_pos (list): Agent's position [x, y, z].
-        world_cluster_centers (list): List of cluster centers in world coordinates [x, y, z].
-        pathfinder (habitat_sim.PathFinder): PathFinder object for navigation.
+        grid_occ_cells (list): List of occupied cells in the grid.
+        cluster_centers (list): List of cluster centers.
 
     Returns:
-        list: Closest world cluster center [x, y, z].
-        float: Distance to the closest cluster center.
+        dict: Mapping each cluster center to a list of occupied cells assigned to it.
     """
-    closest_center = None
-    min_distance = float('inf')
+    cluster_map = {tuple(center): [] for center in cluster_centers}
 
-    for center in world_cluster_centers:
+    for cell in grid_occ_cells:
+        closest_center = None
+        min_distance = float('inf')
 
-        # Create a ShortestPath object
-        shortest_path = habitat_sim.nav.ShortestPath()
-
-        # Set start and end positions (numpy arrays of 3D coordinates)
-        shortest_path.requested_start = np.array(agent_pos)
-        shortest_path.requested_end = np.array(center)
-
-        # Use find_path
-        found = pathfinder.find_path(shortest_path)
-
-        # Check result
-        if found:
-            distance = shortest_path.geodesic_distance
+        for center in cluster_centers:
+            distance = np.linalg.norm(np.array(cell) - np.array(center))
             if distance < min_distance:
                 min_distance = distance
                 closest_center = center
 
-    return closest_center, min_distance
+        if closest_center is not None:
+            cluster_map[tuple(closest_center)].append(tuple(cell))
 
+    return cluster_map
+
+
+# -----------------------------
+# Path Planning Functions
+# -----------------------------
 def get_closest_cluster_path(agent_pos, grid_cluster_centers, grid_free_cells):
     """
     Get the path to the closest cluster center from the agent's position in 2D space.
@@ -907,53 +964,28 @@ def get_closest_cluster_path(agent_pos, grid_cluster_centers, grid_free_cells):
 
     return closest_center, best_path
 
+def compute_path(start, end, grid_free_cells):
+    """
+    Compute the path from start to end and its length using A* algorithm.
 
+    Args:
+        start (tuple): Starting position (x, y).
+        end (tuple): Ending position (x, y).
+        grid_free_cells (2D list): Grid where 0 = free, 1 = occupied.
 
-# -----------------------------
-# A* Functions
-# -----------------------------
-def heuristic(a, b):
-    return np.linalg.norm(np.array(a) - np.array(b))
+    Returns:
+        int: Length of the path.
+        list: Path from start to end, or None if no path exists.
+    """
+    path = a_star(grid_free_cells, start, end)
+    if not path:
+        return float('inf'), None
 
-def a_star(free_cells, start, goal):
-    start = tuple(start)
-    goal = tuple(goal)
+    # Remove the first cell (start) from the path
+    path = [list(p) for p in path[1:]]
+    path_length = len(path)
+    return path_length, path
 
-    # Convert free cell list to set of tuples for O(1) lookup
-    free_set = {tuple(cell) for cell in free_cells}
-
-    open_set = []
-    heapq.heappush(open_set, (heuristic(start, goal), 0, start, [start]))
-    visited = set()
-
-    while open_set:
-        est_total, cost_so_far, current, path = heapq.heappop(open_set)
-        current = tuple(current)
-
-        if current == goal:
-            return path
-        if current in visited:
-            continue
-        visited.add(current)
-
-        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
-            neighbor = (current[0] + dx, current[1] + dy)
-            if neighbor in free_set and neighbor not in visited:
-                heapq.heappush(
-                    open_set,
-                    (
-                        cost_so_far + 1 + heuristic(neighbor, goal),
-                        cost_so_far + 1,
-                        neighbor,
-                        path + [neighbor]
-                    )
-                )
-    return None
-
-
-# -----------------------------
-# Path Planning Functions
-# -----------------------------
 def compute_facing_rotation(agent_pos, goal_pos):
     """
     Returns one of [0, 90, 180, 270], representing the best orientation
@@ -1023,6 +1055,48 @@ def compute_relative_move_action(current_pos, next_pos, current_rotation):
         return 'move_right'
     else:
         raise ValueError("Unexpected rotation delta")
+
+
+# -----------------------------
+# A* Functions
+# -----------------------------
+def heuristic(a, b):
+    return np.linalg.norm(np.array(a) - np.array(b))
+
+def a_star(free_cells, start, goal):
+    start = tuple(start)
+    goal = tuple(goal)
+
+    # Convert free cell list to set of tuples for O(1) lookup
+    free_set = {tuple(cell) for cell in free_cells}
+
+    open_set = []
+    heapq.heappush(open_set, (heuristic(start, goal), 0, start, [start]))
+    visited = set()
+
+    while open_set:
+        est_total, cost_so_far, current, path = heapq.heappop(open_set)
+        current = tuple(current)
+
+        if current == goal:
+            return path
+        if current in visited:
+            continue
+        visited.add(current)
+
+        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+            neighbor = (current[0] + dx, current[1] + dy)
+            if neighbor in free_set and neighbor not in visited:
+                heapq.heappush(
+                    open_set,
+                    (
+                        cost_so_far + 1 + heuristic(neighbor, goal),
+                        cost_so_far + 1,
+                        neighbor,
+                        path + [neighbor]
+                    )
+                )
+    return None
 
 
 # -----------------------------
@@ -1153,40 +1227,27 @@ def simulate_visibility_rays(grid_map, agent_grid_position, agent_yaw_deg, hfov_
 
     return rays
 
-def compute_visible_occ_cells(rays, grid_map, depth_map, grid_cells, world_positions, agent_grid_position, agent_rot, agent_yaw_deg, agent_radius, scene_height=3.0, agent_height=1.5, intrinsics=None):
+def compute_visible_occ_cells(rays, grid_map, depth_map, grid_cells, world_positions, agent_grid_position, agent_rot, intrinsics, scene_height=3.0, agent_height=1.0):
     """
     Computes the visible occupancy cells from the agent's position and orientation in the grid map.
 
     Args:
         rays (list): List of rays, where each ray is a list of cells it owns.
         grid_map (np.ndarray): The occupancy grid map.
-        depth_map (np.ndarray): The depth map corresponding to the grid map.
+        grid_cells (list): List of grid cells in the format [[z, x], ...].
+        world_positions (list): List of real-world positions corresponding to grid cells.
         agent_grid_position (tuple): The agent's position in the grid (z, x).
-        agent_yaw_deg (float): The agent's yaw orientation in degrees.
-        agent_radius (tuple): Agent radius in topdown and grid maps.
+        agent_rot (float): The agent's rotation in degrees.
+        intrinsics (dict): Camera intrinsics containing fx, fy, cx, cy 
+        scene_height (float): Height of the scene in meters (default is 3.0).
+        agent_height (float): Height of the agent in meters (default is 1.0).
 
+    Returns:
+        list: List of visible occupancy cells in the format [(z, x), ...].
     """
 
-    # Agent radius and grid position
-    grid_x, grid_y = agent_grid_position
-    occ_grid_radius = agent_radius[1]  # Use the radius for the occupancy grid
-
-    fig, ax = plt.subplots(figsize=(6, 6))
-    # Display the occupancy grid map
-    ax.imshow(grid_map)
-    ax.set_title('Occupancy Grid Map with Visible Cells')
-    ax.axis('off')
-
-    # Draw agent
-    agent_yaw_rad = math.radians(agent_yaw_deg)
-    ax.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius * 2 / 3, color="red", fill=True))
-    ax.add_patch(plt.Arrow(
-        grid_y, grid_x,
-        -occ_grid_radius * np.sin(agent_yaw_rad),
-        -occ_grid_radius * np.cos(agent_yaw_rad),
-        width=occ_grid_radius / 2,
-        color="black"
-    ))
+    # Initiallize the visible occupancy cells
+    visible_occ_cells = []
 
     # Compute agent position in real world coordinates
     idx = grid_cells.index(list(agent_grid_position))
@@ -1232,8 +1293,10 @@ def compute_visible_occ_cells(rays, grid_map, depth_map, grid_cells, world_posit
             if depth_value < distance or depth_value == float('-Inf'):
                 break   
 
-            ax.add_patch(plt.Rectangle((x - 0.5, z - 0.5), 1, 1, color='yellow', alpha=0.4))
+            # If the depth value is valid, add the cell to visible occupancy cells
+            # Check if cell is occupied
+            if tuple(grid_map[z, x]) != (255, 255, 255):
+                visible_occ_cells.append((z, x))
 
-    plt.tight_layout()
-    plt.show()
+    return visible_occ_cells
 

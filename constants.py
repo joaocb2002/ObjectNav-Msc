@@ -34,4 +34,4 @@ ACTIONS = {
 DIRICHLET_PRIOR = 1.0
 
 # Display settings
-DISPLAY_STEP = 10 
+DISPLAY_STEP = 10
