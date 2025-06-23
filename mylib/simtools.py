@@ -567,21 +567,22 @@ def parse_yolo_detections(results):
             - 'confidence': Detection confidence (float)
             - 'prob_vector': Class probability distribution (np.ndarray)
     """
-    result = results[0]  # Single image inference assumed
+    result = results[0]  # One image, one result
 
-    boxes = result.boxes.xyxy.cpu().numpy()         # (N, 4)
-    confs = result.boxes.conf.cpu().numpy()         # (N,)
-    class_ids = result.boxes.cls.cpu().numpy()      # (N,)
-    prob_vectors = result.boxes.data[:, 6:].cpu().numpy()  # (N, num_classes)
-    names = result.names                             # ID-to-name map (list or dict)
+    xyxy = result.boxes.xyxy.cpu().numpy()         # (N, 4)
+    conf = result.boxes.conf.cpu().numpy()         # (N,)
+    cls = result.boxes.cls.cpu().numpy()           # (N,)
+    prob_vectors = result.boxes.probs.cpu().numpy()  # (N, num_classes)
+    names = result.names                           # class names
+    num_detections = len(xyxy)                    # number of detections
 
     detections = []
-    for i in range(len(boxes)):
+    for i in range(len(xyxy)):
         detections.append({
-            'box': boxes[i].astype(int),
-            'class_id': int(class_ids[i]),
-            'name': names[int(class_ids[i])],
-            'confidence': float(confs[i][0]),
+            'box': xyxy[i].astype(int),
+            'class_id': int(cls[i]),
+            'name': names[int(cls[i])],
+            'confidence': float(conf[i][0]),
             'prob_vector': prob_vectors[i]
         })
 

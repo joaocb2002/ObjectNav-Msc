@@ -16,6 +16,7 @@ OriginalBoxes = results_mod.Boxes
 # Override Boxes class to interpret .conf and .cls from full class vector
 class PatchedBoxes(OriginalBoxes):
     def __init__(self, boxes, orig_shape):
+        # Same original init       
         if boxes.ndim == 1:
             boxes = boxes[None, :]
         n = boxes.shape[-1]
@@ -24,13 +25,14 @@ class PatchedBoxes(OriginalBoxes):
         self.is_track = False
         self.num_classes = 0
 
+        # Prepare for new output format
         if n == 6:
             self.format = 'xyxy_conf_cls'
         elif n == 7:
             self.format = 'xyxy_conf_cls_track'
             self.is_track = True
         else:
-            self.format = 'xyxy_conf_cls_classconf'
+            self.format = 'xyxy_conf_cls_probs'
             self.num_classes = n - 6
 
         self.data = boxes
@@ -47,8 +49,9 @@ class PatchedBoxes(OriginalBoxes):
             return self.data[:, 6:].argmax(1).to(torch.int)
         return self.data[:, 5].to(torch.int)
     
-    # @property
-    # def class_conf(self):        
+    @property
+    def probs(self):       
+        return self.data[:, 6:] if self.data.shape[1] > 6 else None 
 
 # Replace Results.Boxes with the patched version
 results_mod.Boxes = PatchedBoxes
@@ -88,9 +91,7 @@ def non_max_suppression(
     nc = nc or (prediction.shape[1] - 4)  # number of classes
     nm = prediction.shape[1] - nc - 4     # number of masks or extra features (if any)
     mi = 4 + nc                           # used to slice prediction before masks
-
-    # Filter out predictions where all class scores are below threshold
-    xc = prediction[:, 4:mi].amax(1) > conf_thres
+    xc = prediction[:, 4:mi].amax(1).sigmoid() > conf_thres # confidence mask
     prediction = prediction.transpose(-1, -2)
 
     # Convert boxes from xywh to xyxy format
@@ -121,12 +122,12 @@ def non_max_suppression(
         # Split into box coordinates, class confidences, and masks
         box, cls_conf, mask = x.split((4, nc, nm), 1)
 
-        # Normalize sigmoid class scores to sum to 1 (not true softmax)
-        cls_conf_sum = cls_conf.sum(dim=1, keepdim=True).clamp(min=1e-9)
-        cls_conf = cls_conf / cls_conf_sum  # normalized class prob vector
-
         # Extract top-1 class and its confidence (for NMS ranking)
         conf, j = cls_conf.max(1, keepdim=True)
+        conf = conf.sigmoid()  # apply sigmoid to class scores
+
+        # Apply sigmoid to class confidence scores
+        cls_conf = torch.sigmoid(cls_conf)  # apply sigmoid to class scores
 
         # Retain full class confidence vector after max
         x = torch.cat((box, conf, j.float(), cls_conf, mask), 1)[conf.view(-1) > conf_thres]
@@ -135,7 +136,7 @@ def non_max_suppression(
 
         n = x.shape[0]
         if not n:
-            continue
+            continue 
 
         # Keep only top-n scoring boxes to speed up NMS
         if n > max_nms:
@@ -160,20 +161,9 @@ def non_max_suppression(
 
     return output
 
+
 # Apply custom NMS
 ultralytics.utils.ops.non_max_suppression = non_max_suppression
-# ------------------------------------------------------------------- #
-# ------------------------------------------------------------------- #
-# ------------------------------------------------------------------- #
-# ------------------------------------------------------------------- #
-
-# Patch Results.__init__ (unchanged behavior but re-hooked for future use)
-original_results_init = results_mod.Results.__init__
-
-def patched_results_init(self, orig_img, path, names, boxes=None, masks=None, probs=None, keypoints=None, obb=None):
-    original_results_init(self, orig_img, path, names, boxes, masks, probs, keypoints, obb)
-
-results_mod.Results.__init__ = patched_results_init
 # ------------------------------------------------------------------- #
 # ------------------------------------------------------------------- #
 # ------------------------------------------------------------------- #

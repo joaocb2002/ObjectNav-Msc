@@ -10,9 +10,6 @@ import ultralytics.engine.results as results_mod
 from ultralytics.models.yolo.detect.predict import DetectionPredictor
 from ultralytics.utils.ops import scale_boxes, convert_torch2numpy_batch
 
-# Softmax temperature for class probabilities
-TEMPERATURE = 2.0
-
 # Load original Boxes class
 OriginalBoxes = results_mod.Boxes
 
@@ -129,8 +126,12 @@ def non_max_suppression(
         conf, j = cls_conf.max(1, keepdim=True)
         conf = conf.sigmoid()  # apply sigmoid to class scores
 
-        # Apply softmax to class confidence scores
-        cls_conf = torch.softmax(cls_conf / TEMPERATURE, dim=1)  # apply softmax to class scores
+        # Apply sigmoid to class confidence scores
+        cls_conf = torch.sigmoid(cls_conf)  # apply sigmoid to class scores
+
+        # Normalize sigmoid class scores to sum to 1 (not true softmax)
+        cls_conf_sum = cls_conf.sum(dim=1, keepdim=True).clamp(min=1e-9)
+        cls_conf = cls_conf / cls_conf_sum  # normalized class prob vector
 
         # Retain full class confidence vector after max
         x = torch.cat((box, conf, j.float(), cls_conf, mask), 1)[conf.view(-1) > conf_thres]

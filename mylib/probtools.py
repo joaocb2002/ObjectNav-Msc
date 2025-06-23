@@ -78,33 +78,37 @@ def dirichlet_pdf(x, alpha):
     Compute the Dirichlet PDF at point x for parameters alpha.
 
     Parameters:
-        x (array-like): K-dimensional probability vector (sum to 1).
+        x (array-like): K-dimensional probability vector (must sum to 1).
         alpha (array-like): K-dimensional Dirichlet parameters.
 
     Returns:
         float: Probability density at x.
     """
     if alpha is None or len(alpha) == 0:
-        print("Warning: Dirichlet parameters are empty. Returning 0.")
-        return 0.0
+        raise ValueError("Dirichlet parameters are empty.")
+    
+    x = np.asarray(x, dtype=np.float64)
+    alpha = np.asarray(alpha, dtype=np.float64)
 
-    x = np.asarray(x)
-    alpha = np.asarray(alpha)
-
+    if x.shape != alpha.shape:
+        raise ValueError("x and alpha must have the same shape.")
+    if not np.all(np.isfinite(x)) or not np.all(np.isfinite(alpha)):
+        raise ValueError("Inputs must be finite.")
     if not np.isclose(np.sum(x), 1.0, atol=1e-6):
         raise ValueError(f"Input vector x must sum to 1. Got sum: {np.sum(x)}")
-    elif np.any(x < 0):
+    if np.any(x < 0):
         raise ValueError("All elements of x must be >= 0.")
-    elif np.any(alpha <= 0):
+    if np.any(alpha <= 0):
         raise ValueError("All alpha parameters must be > 0.")
-    elif np.any((x == 0) & (alpha < 1)):
-        print("Warning: Dirichlet PDF evaluated at zero with alpha < 1. Returning 0.")
-        return 0.0  # log(0) with alpha < 1 is undefined
+    if np.any((x == 0) & (alpha < 1)):
+        return 0.0  # Avoid undefined log(0) with alpha < 1
 
     log_B = np.sum(gammaln(alpha)) - gammaln(np.sum(alpha))
-    log_pdf = -log_B + np.sum((alpha - 1) * np.log(x))
+    log_pdf = -log_B + np.sum((alpha - 1) * np.log(np.maximum(x, 1e-20)))
 
-    return np.exp(log_pdf)
+    MAX_EXP = 709.78
+    MAX_FLOAT = np.finfo(np.float64).max
+    return np.exp(log_pdf) if log_pdf <= MAX_EXP else MAX_FLOAT
 
 def kaplan_update(current_belief, likelihood_vec):
     """
