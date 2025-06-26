@@ -11,7 +11,7 @@ from ultralytics.models.yolo.detect.predict import DetectionPredictor
 from ultralytics.utils.ops import scale_boxes, convert_torch2numpy_batch
 
 # Softmax temperature for class probabilities
-TEMPERATURE = 2.0
+TEMPERATURE = 2.4
 
 # Load original Boxes class
 OriginalBoxes = results_mod.Boxes

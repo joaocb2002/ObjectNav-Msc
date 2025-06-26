@@ -925,6 +925,28 @@ def assign_cluster_centers_to_cells(grid_occ_cells, cluster_centers):
 
     return cluster_map
 
+def num_cluster_centers(total_white_cells, alpha=0.3, beta=0.5, min_clusters=1, max_clusters=None):
+    """
+    Compute initial number of cluster centers for object search in a grid-based indoor space.
+
+    Parameters:
+    - total_white_cells (int): Number of white (navigable) cells in the environment.
+    - alpha (float): Scaling factor for tuning cluster aggressiveness.
+    - beta (float): Exponent controlling growth rate; default 0.5 gives sqrt scaling.
+    - min_clusters (int): Minimum allowed cluster centers (default = 1).
+    - max_clusters (int or None): Optional cap on maximum cluster centers.
+
+    Returns:
+    - int: Number of initial cluster centers.
+    """
+    if total_white_cells <= 0:
+        return 0
+
+    estimated = math.ceil(alpha * (total_white_cells ** beta))
+    estimated = max(min_clusters, estimated)
+    if max_clusters is not None:
+        estimated = min(max_clusters, estimated)
+    return estimated
 
 # -----------------------------
 # Path Planning Functions
