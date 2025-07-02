@@ -3,3 +3,4 @@ from . import simsettings
 from . import simtools
 from . import yolo_patch_softmax
 from . import probtools
+from . import dqn

@@ -30,6 +30,12 @@ ACTIONS = {
     "turn_right",
 }
 
+REDUCED_ACTIONS = {
+    "move_forward",
+    "turn_left",
+    "turn_right",
+}
+
 # Dirichlet distribution parameters
 DIRICHLET_PRIOR = 1.0
 
