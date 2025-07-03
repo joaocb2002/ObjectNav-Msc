@@ -3,13 +3,15 @@
         "scene": "FloorPlan215_physics",
         "target_object": "tv",
         "target_object_id": 62,
-        "target_object_location": [5.640192985534668, 0.9984869956970215, 6.950367450714111]
+        "target_object_location": [5.640192985534668, 0.9984869956970215, 6.950367450714111],
+        "index": 0
     },
     {
         "scene": "FloorPlan220_physics",
         "target_object": "laptop",
         "target_object_id": 63,
-        "target_object_location": [2.0012776851654053, 0.5161712765693665, -0.07372961938381195]
+        "target_object_location": [2.0012776851654053, 0.5161712765693665, -0.07372961938381195],
+        "index": 1
     },
     {
         "scene": "FloorPlan_Train3_4",
@@ -35,7 +37,7 @@
         "target_object_id": 45,
         "target_object_location": [-1.8632761240005493, 0.7469968199729919, -4.524569988250732]
     },
-        {
+    {
         "scene": "FloorPlan_Val1_1",
         "target_object": "cell phone",
         "target_object_id": 67,

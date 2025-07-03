@@ -16,8 +16,8 @@ CELL_SIDE = 2*AGENT_RADIUS # 30 cm
 MAP_RESOLUTION = 0.01 # 1 cm
 
 # Simulation parameters
-MAX_ITER = 500
-CONFIDENCE_THRESHOLD = 0.80
+CONFIDENCE_THRESHOLD = 0.90
+MAX_ITER = float("inf") # No limit on iterations by default
 
 # VALID ACTIONS
 ACTIONS = {
