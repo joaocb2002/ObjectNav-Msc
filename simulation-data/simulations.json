@@ -8,86 +8,198 @@
     },
     {
         "index": 1,
+        "scene": "FloorPlan215_physics", 
+        "target_object": "laptop",
+        "target_object_id": 63,
+        "target_object_location": [2.4479992389678955, 0.5105593800544739, 4.055641174316406]
+    },
+    {
+        "index": 2,
         "scene": "FloorPlan220_physics",
         "target_object": "laptop",
         "target_object_id": 63,
         "target_object_location": [2.0012776851654053, 0.5161712765693665, -0.07372961938381195]
     },
     {
-        "index": 2,
+        "index": 3,
         "scene": "FloorPlan_Train3_4",
         "target_object": "laptop",
         "target_object_id": 63,
         "target_object_location": [-9.241811752319336, 0.35663527250289917, -2.1109025478363037]
     },
     {
-        "index": 3,
+        "index": 4,
+        "scene": "FloorPlan_Train3_4",
+        "target_object": "clock",
+        "target_object_id": 74,
+        "target_object_location": [-4.815568923950195, 0.7408668994903564, -1.2092323303222656]
+    },
+    {
+        "index": 5,
+        "scene": "FloorPlan_Train3_4",
+        "target_object": "apple",
+        "target_object_id": 47,
+        "target_object_location": [ -1.6036508083343506, 0.8012533783912659, -4.060398578643799 ]
+    },
+    {
+        "index": 6,
+        "scene": "FloorPlan_Train4_1",
+        "target_object": "bottle",
+        "target_object_id": 39,
+        "target_object_location": [ -3.631037712097168, 0.7135971784591675, -3.1245880126953125 ]
+    },
+    {
+        "index": 7,
         "scene": "FloorPlan_Train4_1",
         "target_object": "cell phone",
         "target_object_id": 67,
         "target_object_location": [-9.012124061584473, 0.4124963581562042, -2.241020441055298]
     },
     {
-        "index": 4,
+        "index": 8,
         "scene": "FloorPlan_Train5_1",
         "target_object": "remote",
         "target_object_id": 65,
         "target_object_location": [-1.3309626579284668, 0.4568992853164673, -4.346043586730957]
     },
     {
-        "index": 5,
+        "index": 9,
+        "scene": "FloorPlan_Train5_1",
+        "target_object": "teddy bear",
+        "target_object_id": 77,
+        "target_object_location": [ -8.680521965026855, 0.5778275728225708, -3.2672173976898193 ]
+    },
+    {
+        "index": 10,
+        "scene": "FloorPlan_Train5_1",
+        "target_object": "potted plant",
+        "target_object_id": 58,
+        "target_object_location":  [ -6.570887565612793, 0.8338170051574707, -3.995626449584961 ]
+    },
+    {
+        "index": 11,
         "scene": "FloorPlan_Train5_2",
         "target_object": "bowl",
         "target_object_id": 45,
         "target_object_location": [-1.8632761240005493, 0.7469968199729919, -4.524569988250732]
     },
     {
-        "index": 6,
+        "index": 12,
+        "scene": "FloorPlan_Train5_2",
+        "target_object": "book",
+        "target_object_id": 73,
+        "target_object_location": [ -3.774029493331909, 0.5375187397003174, -2.5490105152130127 ]
+    },
+    {
+        "index": 13,
+        "scene": "FloorPlan_Train5_2",
+        "target_object": "cell phone",
+        "target_object_id": 67,
+        "target_object_location": [ -7.372910022735596, 0.5900533199310303, -3.3660879135131836 ]
+    },
+    {
+        "index": 14,
         "scene": "FloorPlan_Val1_1",
         "target_object": "cell phone",
         "target_object_id": 67,
         "target_object_location": [-3.773744583129883, 0.3556630313396454, -1.3232477903366089]
     },
     {
-        "index": 7,
+        "index": 15,
+        "scene": "FloorPlan_Val1_1",
+        "target_object": "fork",
+        "target_object_id": 42,
+        "target_object_location": [ -5.280335903167725, 0.7399941682815552, -4.4033308029174805 ]
+    },
+    {
+        "index": 16,
+        "scene": "FloorPlan_Val1_1",
+        "target_object": "tv",
+        "target_object_id": 62,
+        "target_object_location": [ -6.827147006988525, 1.5001744031906128, -2.6007096767425537 ]
+    },
+    {
+        "index": 17,
         "scene": "FloorPlan_Val1_2",
         "target_object": "book",
         "target_object_id": 73,
         "target_object_location": [-7.067775726318359, 0.5178242325782776, -3.60213303565979]
     },
     {
-        "index": 8,
+        "index": 18,
+        "scene": "FloorPlan_Val1_2",
+        "target_object": "apple",
+        "target_object_id": 47,
+        "target_object_location": [ -7.1788506507873535, 0.7682502865791321, -2.2439260482788086 ]
+    },
+    {
+        "index": 19,
         "scene": "FloorPlan_Val1_3",
         "target_object": "bottle",
         "target_object_id": 39,
         "target_object_location": [-2.1638760566711426, 0.7422816157341003, -1.582960844039917]
     },
     {
-        "index": 9,
+        "index": 20,
+        "scene": "FloorPlan_Val1_4",
+        "target_object": "bed",
+        "target_object_id": 59,
+        "target_object_location": [ -2.2769968509674072, 0.0007704198360443115, -1.6900018453598022 ]
+    },
+    {
+        "index": 21,
         "scene": "FloorPlan_Val2_2",
         "target_object": "clock",
         "target_object_id": 74,
         "target_object_location": [-1.392167091369629, 1.4686566591262817, -1.3820421695709229]
     },
     {
-        "index": 10,
+        "index": 22,
+        "scene": "ProcTHOR-Train-100",
+        "target_object": "bed",
+        "target_object_id": 59,
+        "target_object_location": [ -11.634516753758305, -0.014264515644754283, 3.256460460662842 ]
+    },
+    {
+        "index": 23,
         "scene": "ProcTHOR-Train-100",
         "target_object": "toilet",
         "target_object_id": 61,
         "target_object_location": [-14.301100597105403, 0.001768748760223371, 8.834680106408461]
     },
     {
-        "index": 11,
+        "index": 24,
         "scene": "ProcTHOR-Train-105",
         "target_object": "teddy bear",
         "target_object_id": 77,
         "target_object_location": [-11.4488227345562, 0.8050001102812845, 10.671119840569014]
     },
     {
-        "index": 12,
+        "index": 25,
+        "scene": "ProcTHOR-Train-105",
+        "target_object": "toaster",
+        "target_object_id": 70,
+        "target_object_location": [ -1.5477820500731467, 0.9439119144110009, 3.1742578579627208 ]
+    },
+    {
+        "index": 26,
+        "scene": "ProcTHOR-Train-108",
+        "target_object": "sink",
+        "target_object_id": 71,
+        "target_object_location": [ -8.820980269551278, 9.99999993922529e-09, 14.412255812644958 ]
+    },
+    {
+        "index": 27,
         "scene": "ProcTHOR-Train-112",
         "target_object": "microwave",
         "target_object_id": 68,
         "target_object_location": [-11.539888358199647, 0.9425563303598442, 2.0594434993852118]
+    },
+    {
+        "index": 28,
+        "scene": "ProcTHOR-Train-112",
+        "target_object": "cup",
+        "target_object_id": 41,
+        "target_object_location": [ -9.938852310180664, 0.8145942122116685, 5.958631992340088 ]
     }
 ]
