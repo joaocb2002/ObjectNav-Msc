@@ -639,9 +639,9 @@ def compute_travelled_distance(start_pos, end_pos):
     """
     return np.linalg.norm(np.array(start_pos) - np.array(end_pos))
 
-def compute_closeness(real_pos, computed_pos):
+def compute_location_error(real_pos, computed_pos):
     """
-    Compute the closeness between two positions in 2D space.
+    Compute the distance between two positions in 3D space.
     Args:
         real_pos (list): Real-world position [x, y, z].
         computed_pos (list): Computed position [x, y, z].
@@ -1009,45 +1009,19 @@ def compute_path(start, end, grid_free_cells):
     path_length = len(path)
     return path_length, path
 
-def compute_facing_rotation(agent_pos, goal_pos):
+def compute_relative_actions(current_pos, current_rot, next_pos, action_set):
     """
-    Returns one of [0, 90, 180, 270], representing the best orientation
-    for the agent to face the goal cell.
-    """
-    dx = goal_pos[0] - agent_pos[0]
-    dy = goal_pos[1] - agent_pos[1]
-
-    # Determine the dominant axis
-    if abs(dx) > abs(dy):
-        return 180 if dx > 0 else 0   # Down or Up
-    else:
-        return 270 if dy > 0 else 90  # Right or Left
-    
-def compute_rotation_action(current_rotation, desired_rotation):
-    """
-    Returns one of ['turn_left', 'turn_right', 'turn_around', None]
-    to rotate from current_rotation to desired_rotation.
-    """
-    delta = (desired_rotation - current_rotation) % 360
-
-    if delta == 0:
-        return None
-    elif delta == 90:
-        return 'turn_left'
-    elif delta == 180:
-        return 'turn_around'
-    elif delta == 270:
-        return 'turn_right'
-    else:
-        raise ValueError("Invalid rotation difference")
-
-def compute_relative_move_action(current_pos, next_pos, current_rotation):
-    """
-    Returns a relative move action from current_pos to next_pos
+    Returns the shortest required set of actions to go from current_pos to next_pos
     based on current_rotation.
-    
-    Output is one of:
-        'move_forward', 'move_left', 'move_right', 'move_backward'
+
+    Args:
+        current_pos (tuple): Current position in the grid (x, y).
+        current_rotation (int): Current rotation of the agent in degrees (0, 90, 180, 270).
+        next_pos (tuple): Next position in the grid (x, y).
+        action_set (list): List of valid actions.
+
+    Returns:
+        list: The set of actions to perform to move from current_pos to next_pos.
     """
     dx = next_pos[0] - current_pos[0]
     dy = next_pos[1] - current_pos[1]
@@ -1066,19 +1040,29 @@ def compute_relative_move_action(current_pos, next_pos, current_rotation):
         raise ValueError("Invalid move: cells are not adjacent")
 
     # Convert global direction to relative move based on current rotation
-    delta = (direction - current_rotation) % 360
+    delta = (direction - current_rot) % 360
 
     if delta == 0:
-        return 'move_forward'
+        return ['move_forward']
     elif delta == 90:
-        return 'move_left'
-    elif delta == 180:
-        return 'move_backward'
+        if 'move_left' in action_set:
+            return ['move_left']
+        else:
+            return ['turn_left', 'move_forward']
     elif delta == 270:
-        return 'move_right'
+        if 'move_right' in action_set:
+            return ['move_right']
+        else:
+            return ['turn_right', 'move_forward']
+    elif delta == 180:
+        if 'move_backward' in action_set:
+            return ['move_backward']
+        elif 'turn_around' in action_set:
+            return ['turn_around', 'move_forward']
+        else:
+            return ['turn_left', 'turn_left', 'move_forward']
     else:
         raise ValueError("Unexpected rotation delta")
-
 
 # -----------------------------
 # A* Functions
@@ -1086,11 +1070,22 @@ def compute_relative_move_action(current_pos, next_pos, current_rotation):
 def heuristic(a, b):
     return np.linalg.norm(np.array(a) - np.array(b))
 
-def a_star(free_cells, start, goal):
+def perpendicular_distance(point, line_start, line_end):
+    # Return perpendicular distance from `point` to the line segment from `line_start` to `line_end`
+    px, py = point
+    x1, y1 = line_start
+    x2, y2 = line_end
+    dx, dy = x2 - x1, y2 - y1
+    if dx == dy == 0:
+        return 0  # Avoid division by zero if start==end
+    num = abs(dy * px - dx * py + x2 * y1 - y2 * x1)
+    denom = np.hypot(dx, dy)
+    return num / denom
+
+def a_star(free_cells, start, goal, alpha=0.1):
     start = tuple(start)
     goal = tuple(goal)
 
-    # Convert free cell list to set of tuples for O(1) lookup
     free_set = {tuple(cell) for cell in free_cells}
 
     open_set = []
@@ -1099,7 +1094,6 @@ def a_star(free_cells, start, goal):
 
     while open_set:
         est_total, cost_so_far, current, path = heapq.heappop(open_set)
-        current = tuple(current)
 
         if current == goal:
             return path
@@ -1110,15 +1104,12 @@ def a_star(free_cells, start, goal):
         for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
             neighbor = (current[0] + dx, current[1] + dy)
             if neighbor in free_set and neighbor not in visited:
-                heapq.heappush(
-                    open_set,
-                    (
-                        cost_so_far + 1 + heuristic(neighbor, goal),
-                        cost_so_far + 1,
-                        neighbor,
-                        path + [neighbor]
-                    )
-                )
+                g = cost_so_far + 1
+                h = heuristic(neighbor, goal)
+                line_penalty = alpha * perpendicular_distance(neighbor, start, goal)
+                f = g + h + line_penalty
+                heapq.heappush(open_set, (f, g, neighbor, path + [neighbor]))
+
     return None
 
 

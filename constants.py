@@ -16,11 +16,11 @@ CELL_SIDE = 2*AGENT_RADIUS # 30 cm
 MAP_RESOLUTION = 0.01 # 1 cm
 
 # Simulation parameters
-CONFIDENCE_THRESHOLD = 0.90
-MAX_ITER = float("inf") # No limit on iterations by default
+CONFIDENCE_THRESHOLD = 0.80
+MAX_ITER = 5000 # MAX iterations by default
 
 # VALID ACTIONS
-ACTIONS = {
+EXTENDED_ACTIONS = {
     "move_forward",
     "move_backward",
     "move_left",
@@ -30,7 +30,7 @@ ACTIONS = {
     "turn_right",
 }
 
-REDUCED_ACTIONS = {
+ACTIONS = {
     "move_forward",
     "turn_left",
     "turn_right",
@@ -40,4 +40,4 @@ REDUCED_ACTIONS = {
 DIRICHLET_PRIOR = 1.0
 
 # Display settings
-DISPLAY_STEP = 10
+DISPLAY_STEP = 10 # Display every 10 actions by default

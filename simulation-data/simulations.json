@@ -1,79 +1,90 @@
 [
     {
-        "scene": "FloorPlan215_physics",
+        "index": 0,
+        "scene": "FloorPlan215_physics", 
         "target_object": "tv",
         "target_object_id": 62,
-        "target_object_location": [5.640192985534668, 0.9984869956970215, 6.950367450714111],
-        "index": 0
+        "target_object_location": [5.640192985534668, 0.9984869956970215, 6.950367450714111]
     },
     {
+        "index": 1,
         "scene": "FloorPlan220_physics",
         "target_object": "laptop",
         "target_object_id": 63,
-        "target_object_location": [2.0012776851654053, 0.5161712765693665, -0.07372961938381195],
-        "index": 1
+        "target_object_location": [2.0012776851654053, 0.5161712765693665, -0.07372961938381195]
     },
     {
+        "index": 2,
         "scene": "FloorPlan_Train3_4",
         "target_object": "laptop",
         "target_object_id": 63,
         "target_object_location": [-9.241811752319336, 0.35663527250289917, -2.1109025478363037]
     },
     {
+        "index": 3,
         "scene": "FloorPlan_Train4_1",
         "target_object": "cell phone",
         "target_object_id": 67,
         "target_object_location": [-9.012124061584473, 0.4124963581562042, -2.241020441055298]
     },
     {
+        "index": 4,
         "scene": "FloorPlan_Train5_1",
         "target_object": "remote",
         "target_object_id": 65,
         "target_object_location": [-1.3309626579284668, 0.4568992853164673, -4.346043586730957]
     },
     {
+        "index": 5,
         "scene": "FloorPlan_Train5_2",
         "target_object": "bowl",
         "target_object_id": 45,
         "target_object_location": [-1.8632761240005493, 0.7469968199729919, -4.524569988250732]
     },
     {
+        "index": 6,
         "scene": "FloorPlan_Val1_1",
         "target_object": "cell phone",
         "target_object_id": 67,
         "target_object_location": [-3.773744583129883, 0.3556630313396454, -1.3232477903366089]
     },
     {
+        "index": 7,
         "scene": "FloorPlan_Val1_2",
         "target_object": "book",
         "target_object_id": 73,
         "target_object_location": [-7.067775726318359, 0.5178242325782776, -3.60213303565979]
     },
     {
+        "index": 8,
         "scene": "FloorPlan_Val1_3",
         "target_object": "bottle",
         "target_object_id": 39,
         "target_object_location": [-2.1638760566711426, 0.7422816157341003, -1.582960844039917]
     },
     {
+        "index": 9,
         "scene": "FloorPlan_Val2_2",
         "target_object": "clock",
         "target_object_id": 74,
         "target_object_location": [-1.392167091369629, 1.4686566591262817, -1.3820421695709229]
     },
     {
+        "index": 10,
         "scene": "ProcTHOR-Train-100",
         "target_object": "toilet",
         "target_object_id": 61,
         "target_object_location": [-14.301100597105403, 0.001768748760223371, 8.834680106408461]
     },
     {
+        "index": 11,
         "scene": "ProcTHOR-Train-105",
         "target_object": "teddy bear",
         "target_object_id": 77,
         "target_object_location": [-11.4488227345562, 0.8050001102812845, 10.671119840569014]
     },
     {
+        "index": 12,
         "scene": "ProcTHOR-Train-112",
         "target_object": "microwave",
         "target_object_id": 68,
