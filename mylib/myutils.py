@@ -161,40 +161,33 @@ def bin_index(scale, bin_vector):
 
     return bin_index
 
+import numpy as np
+from scipy.ndimage import label, binary_dilation
+
 def retain_largest_white_chunk(grid):
-    """
-    Retains the largest connected component of white ([255, 255, 255]) cells in the grid,
-    turning all other white cells and their surrounding black borders (if enclosed) to grey ([128, 128, 128]).
-
-    Parameters:
-        grid (np.ndarray): A 3D numpy array of shape (H, W, 3), representing the RGB grid.
-
-    Returns:
-        np.ndarray: Modified grid with only the largest white component preserved as white.
-    """
     white = np.array([255, 255, 255])
     black = np.array([0, 0, 0])
     grey = np.array([128, 128, 128])
 
     white_mask = np.all(grid == white, axis=-1)
-
-    # Label connected white regions (4-connectivity)
     structure = np.array([[0,1,0],[1,1,1],[0,1,0]])
-    labeled_array, num_features = label(white_mask, structure=structure)
 
+    labeled_array, num_features = label(white_mask, structure=structure)
     if num_features == 0:
         return grid
 
-    # Find the largest white chunk
+    # Preserve the original grid for boundary checks
+    original_grid = grid.copy()
+
     counts = np.bincount(labeled_array.ravel())
-    counts[0] = 0  # background
+    counts[0] = 0
     largest_label = np.argmax(counts)
 
     largest_chunk_mask = labeled_array == largest_label
     to_grey_mask = white_mask & ~largest_chunk_mask
     grid[to_grey_mask] = grey
 
-    # Now process smaller chunks for border removal
+    H, W = grid.shape[:2]
     for lbl in range(1, num_features + 1):
         if lbl == largest_label:
             continue
@@ -203,17 +196,21 @@ def retain_largest_white_chunk(grid):
         if not np.any(chunk_mask):
             continue
 
-        # Dilate the chunk to get its boundary
         dilated = binary_dilation(chunk_mask, structure=structure)
         boundary_mask = dilated & ~chunk_mask
 
-        # Check if all boundary pixels are black
-        boundary_colors = grid[boundary_mask]
+        # Skip if boundary touches edge (not enclosed)
+        coords = np.argwhere(boundary_mask)
+        if np.any((coords[:,0] == 0) | (coords[:,0] == H-1) |
+                  (coords[:,1] == 0) | (coords[:,1] == W-1)):
+            continue
+
+        boundary_colors = original_grid[boundary_mask]
         if np.all(np.all(boundary_colors == black, axis=-1)):
-            # Set the boundary (black) to grey
             grid[boundary_mask] = grey
 
     return grid
+
 
 def compute_bbox_scale(bbox, rgb):
     """
