@@ -897,33 +897,50 @@ def get_cluster_centers(cluster_map, cluster_num):
 
     return cluster_centers
 
-def assign_cluster_centers_to_cells(grid_occ_cells, cluster_centers):
+def assign_cluster_centers_to_cells(grid_occ_cells, cluster_centers, white_cells, max_dist=4):
     """
-    Assigns each occupied cell to the nearest cluster center.
+    Assigns each occupied cell to the nearest cluster center,
+    only if it's within max_dist of a white (free) cell.
 
     Args:
-        grid_occ_cells (list): List of occupied cells in the grid.
-        cluster_centers (list): List of cluster centers.
+        grid_occ_cells (list of list or tuple): List of occupied (gray) cells as [x, y] or (x, y).
+        cluster_centers (list of list or tuple): List of cluster centers as [x, y] or (x, y).
+        white_cells (list of list or tuple): List of white (free) cells as [x, y] or (x, y).
+        max_dist (int): Maximum Manhattan distance to a white cell.
 
     Returns:
-        dict: Mapping each cluster center to a list of occupied cells assigned to it.
+        dict: Mapping each cluster center to a list of eligible occupied cells assigned to it.
     """
     cluster_map = {tuple(center): [] for center in cluster_centers}
+    white_cells_set = set(tuple(cell) for cell in white_cells)  # Convert to tuple for set
 
     for cell in grid_occ_cells:
+        cell_tuple = tuple(cell)
+
+        # Check if the cell is close enough to any white cell
+        within_range = any(
+            abs(cell_tuple[0] - white[0]) + abs(cell_tuple[1] - white[1]) <= max_dist
+            for white in white_cells_set
+        )
+
+        if not within_range:
+            continue  # Discard gray cell too far from white space
+
+        # Find nearest cluster center (Euclidean)
         closest_center = None
         min_distance = float('inf')
-
         for center in cluster_centers:
-            distance = np.linalg.norm(np.array(cell) - np.array(center))
+            distance = np.linalg.norm(np.array(cell_tuple) - np.array(center))
             if distance < min_distance:
                 min_distance = distance
                 closest_center = center
 
         if closest_center is not None:
-            cluster_map[tuple(closest_center)].append(tuple(cell))
+            cluster_map[tuple(closest_center)].append(cell_tuple)
 
     return cluster_map
+
+
 
 def num_cluster_centers(total_white_cells, alpha=0.3, beta=0.5, min_clusters=1, max_clusters=None):
     """
@@ -1304,7 +1321,7 @@ def compute_visible_occ_cells(rays, grid_map, depth_map, grid_cells, world_posit
             else:
                 depth_value = float('-Inf')
 
-            if depth_value < distance or depth_value == float('-Inf'):
+            if depth_value + 0.15 < distance or depth_value == float('-Inf'):
                 break   
 
             # If the depth value is valid, add the cell to visible occupancy cells
