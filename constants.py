@@ -16,8 +16,11 @@ CELL_SIDE = 2*AGENT_RADIUS # 30 cm
 MAP_RESOLUTION = 0.01 # 1 cm
 
 # Simulation parameters
-CONFIDENCE_THRESHOLD = 0.80
-MAX_ITER = 5000 # MAX iterations by default
+CONFIDENCE_THRESHOLD = 0.85
+LOCATION_ERROR_THRESHOLD = 0.50 # 50 cm
+MAX_ITER_COEF = 0.75 # Coefficient to determine maximum iterations based on free cells
+PSEUDO_COUNT_THRESHOLD = 13.0
+NUM_EPOCHS = 200
 
 # VALID ACTIONS
 EXTENDED_ACTIONS = {

@@ -458,6 +458,36 @@ def compute_max_target_probability(belief_map, grid_cells, target_class_idx):
 
     return max_prob
 
+def check_target_probability_in_entropy_map(belief_map, grid_cells, target_class_idx, threshold):
+    """
+    Checks if the target class probability exceeds a threshold in the belief map.
+
+    Args:
+        belief_map (list of list of np.ndarray): Dirichlet belief map.
+        grid_cells (list): List of grid cells, where each cell is a tuple (x, y).
+        target_class_idx (int): Index of the target class in the Dirichlet distribution.
+        threshold (float): Pseudo-count threshold to check against.
+
+    Returns:
+        bool: True if any cell has a Dirichlet parameter for the target class above the threshold, False otherwise.
+        list: List of the single cell that exceed the threshold by the largest margin.
+    """
+    max_alpha = -1.0
+    max_cell = None
+    for cell in grid_cells:
+        x, y = cell
+        if belief_map[x][y] is not None:
+            alphas = belief_map[x][y]
+            if alphas[target_class_idx] > max_alpha:
+                max_alpha = alphas[target_class_idx]
+                max_cell = cell
+    if max_alpha > threshold:
+        return True, max_cell
+    else:
+        return False, None
+
+
+
 
 # -----------------------------
 # Sensor Functions
@@ -897,7 +927,7 @@ def get_cluster_centers(cluster_map, cluster_num):
 
     return cluster_centers
 
-def assign_cluster_centers_to_cells(grid_occ_cells, cluster_centers, white_cells, max_dist=4):
+def assign_cluster_centers_to_cells(grid_occ_cells, cluster_centers, white_cells, max_dist=2):
     """
     Assigns each occupied cell to the nearest cluster center,
     only if it's within max_dist of a white (free) cell.
@@ -939,8 +969,6 @@ def assign_cluster_centers_to_cells(grid_occ_cells, cluster_centers, white_cells
             cluster_map[tuple(closest_center)].append(cell_tuple)
 
     return cluster_map
-
-
 
 def num_cluster_centers(total_white_cells, alpha=0.3, beta=0.5, min_clusters=1, max_clusters=None):
     """

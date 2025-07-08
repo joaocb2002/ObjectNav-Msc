@@ -201,5 +201,27 @@
         "target_object": "cup",
         "target_object_id": 41,
         "target_object_location": [ -9.938852310180664, 0.8145942122116685, 5.958631992340088 ]
+    },
+    {
+        "index": 29,
+        "scene": "ProcTHOR-Train-1144",
+        "target_object": "sink",
+        "target_object_id": 71,
+        "target_object_location": [-0.38634596168994906,0.0,3.715123523831368]
+    },
+    {
+        "index": 30,
+        "scene": "ProcTHOR-Train-2003",
+        "target_object": "cup",
+        "target_object_id": 41,
+        "target_object_location": [-0.8267626166343689,0.9443606212735176,0.48148101568222046]
+    },
+    {
+        "index": 31,
+        "scene": "ProcTHOR-Train-4003",
+        "target_object": "cup",
+        "target_object_id": 41,
+        "target_object_location": [-0.1279931906610765,0.144051628857851,10.848615653261426]
     }
 ]
+

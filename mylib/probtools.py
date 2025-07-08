@@ -163,7 +163,7 @@ def compute_entropy(belief_vector):
     entropy = -np.sum(normalized_belief * np.log(normalized_belief))
     return entropy
 
-def compute_background_likelihood_vector(distance, num_classes, alpha=1.0):
+def compute_background_likelihood_vector(distance, num_classes, alpha=0.125):
     """
     Computes the background likelihood vector for an empty cell based on distance.
 
@@ -179,8 +179,7 @@ def compute_background_likelihood_vector(distance, num_classes, alpha=1.0):
     background_likelihood_vector = np.zeros(num_classes + 1)
 
     # Compute the likelihood based on distance
-    # value = alpha*np.exp(-alpha*distance)*(1 - FN_RATE)
-    value = 1
+    value = 1 / (1 + alpha * distance)*(1-FN_RATE) 
 
     # Set the background likelihood for the empty cell
     background_likelihood_vector[-1] = value
