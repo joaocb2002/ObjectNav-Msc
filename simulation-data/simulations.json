@@ -222,6 +222,22 @@
         "target_object": "cup",
         "target_object_id": 41,
         "target_object_location": [-0.1279931906610765,0.144051628857851,10.848615653261426]
+    },
+    {
+        "index": 32,
+        "scene": "ProcTHOR-Train-112",
+        "target_object": "laptop",
+        "target_object_id": 63,
+        "target_object_location": [-2.7019927501678467,0.8370066356592074,2.7020478397607803]
+    },
+    {
+        "index": 33,
+        "scene": "ProcTHOR-Train-120",
+        "target_object": "laptop",
+        "target_object_id": 63,
+        "target_object_location": [-4.388556361332703,0.46572605818735285,12.68326727300861]
     }
 ]
+
+
 
