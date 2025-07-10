@@ -1,5 +1,6 @@
 import cv2
 import habitat_sim
+import random
 from scipy.spatial.transform import Rotation as R
 from habitat.utils.visualizations import maps
 import numpy as np
@@ -895,7 +896,7 @@ def cluster_mapping(occ_grid_map, cluster_num):
     Returns:
         dict: Mapping from (x, y) tuple to cluster index.
     """
-    kmeans = KMeans(n_clusters=cluster_num, n_init=100, random_state=0)
+    kmeans = KMeans(n_clusters=cluster_num, n_init=1) # Dynamic random seed, only one initialization: stochasticity
     labels = kmeans.fit_predict(occ_grid_map)
     
     # Create mapping from coordinate tuple to cluster label
@@ -903,17 +904,22 @@ def cluster_mapping(occ_grid_map, cluster_num):
     
     return cluster_map
 
-def get_cluster_centers(cluster_map, cluster_num):
+def get_cluster_centers(cluster_map, cluster_num, top_n=4, seed=None):
     """
-    Get the closest coordinate to the mean of each cluster.
+    Get a representative coordinate for each cluster, randomly selected from the top-N closest to the cluster mean.
 
     Args:
         cluster_map (dict): Mapping from (x, y) tuple to cluster index.
         cluster_num (int): The number of clusters.
+        top_n (int): Number of closest candidates to consider for random choice.
+        seed (int, optional): Random seed for reproducibility.
 
     Returns:
-        list: List of cluster centers.
+        list: List of cluster center coordinates.
     """
+    if seed is not None:
+        random.seed(seed)
+
     cluster_centers = []
 
     for i in range(cluster_num):
@@ -922,8 +928,11 @@ def get_cluster_centers(cluster_map, cluster_num):
             coords_array = np.vstack(coords)
             center = np.mean(coords_array, axis=0)
             distances = np.linalg.norm(coords_array - center, axis=1)
-            closest_coord = list(coords_array[np.argmin(distances)])
-            cluster_centers.append(closest_coord)
+
+            # Get indices of the top-N closest points
+            top_indices = np.argsort(distances)[:top_n]
+            chosen_idx = random.choice(top_indices)
+            cluster_centers.append(list(coords_array[chosen_idx]))
 
     return cluster_centers
 

@@ -236,6 +236,20 @@
         "target_object": "laptop",
         "target_object_id": 63,
         "target_object_location": [-4.388556361332703,0.46572605818735285,12.68326727300861]
+    },
+    {
+        "index": 34,
+        "scene": "ProcTHOR-Train-13",
+        "target_object": "laptop",
+        "target_object_id": 63,
+        "target_object_location": [-8.015352711081482,0.7035654854707614,7.512202725270831]
+    },
+    {
+        "index": 35,
+        "scene": "ProcTHOR-Train-137",
+        "target_object": "laptop",
+        "target_object_id": 63,
+        "target_object_location": [-9.458329380246356,0.8382338655010942,5.439706802368164]
     }
 ]
 
