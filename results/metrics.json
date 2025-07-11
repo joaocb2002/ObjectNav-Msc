@@ -160,5 +160,41 @@
         "success_avg_num_actions": 161.5,
         "success_avg_travelled_distance": 12.931768837548072,
         "success_avg_location_error": 0.1619666889480373
+    },
+    {
+        "simulation_index": 27,
+        "scene": "ProcTHOR-Train-112",
+        "target_object": "microwave",
+        "search_method": "DIRICHLET",
+        "confidence_threshold": 0.85,
+        "max_iter_coefficient": 0.75,
+        "location_error_threshold": 0.5,
+        "pseudo_count_threshold": 13.0,
+        "num_total_epochs": 100,
+        "num_success_epochs": 100,
+        "success_rate": 100.0,
+        "total_avg_num_actions": 322.75,
+        "total_avg_tavelled_distance": 69.09408993576758,
+        "success_avg_num_actions": 322.75,
+        "success_avg_travelled_distance": 69.09408993576758,
+        "success_avg_location_error": 0.13015772063769196
+    },
+    {
+        "simulation_index": 27,
+        "scene": "ProcTHOR-Train-112",
+        "target_object": "microwave",
+        "search_method": "BASELINE",
+        "confidence_threshold": 0.85,
+        "max_iter_coefficient": 0.75,
+        "location_error_threshold": 0.5,
+        "pseudo_count_threshold": 13.0,
+        "num_total_epochs": 100,
+        "num_success_epochs": 98,
+        "success_rate": 98.0,
+        "total_avg_num_actions": 373.85,
+        "total_avg_tavelled_distance": 76.8622131056405,
+        "success_avg_num_actions": 354.3775510204082,
+        "success_avg_travelled_distance": 73.00132284058219,
+        "success_avg_location_error": 0.13007756299570786
     }
 ]
