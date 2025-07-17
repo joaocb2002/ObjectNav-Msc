@@ -67,9 +67,14 @@ class ObjectSearchAgent(nn.Module):
         )
 
     def forward(self, pose, occupancy_patch, belief_patch, goal, hidden_state=None):
+
+        # Make sure goal is a 1D tensor
+        if goal.dim() > 1:
+            goal = goal.view(-1)
+        
         # Encode inputs
         pose_encoded = self.pose_fc(pose)
-        occ_encoded = self.occupancy_cnn(occupancy_patch.unsqueeze(1))
+        occ_encoded = self.occupancy_cnn(occupancy_patch)
         belief_encoded = self.belief_cnn(belief_patch)
         goal_encoded = self.goal_embedding(goal)
 
@@ -104,31 +109,42 @@ class SequenceReplayBuffer:
                 start_idx = random.randint(0, len(ep) - self.sequence_length)
                 batch.append(ep[start_idx:start_idx + self.sequence_length])
             else:
-                batch.append(ep)
+                # Pad shorter sequences if needed (optional)
+                batch.append(ep + [ep[-1]] * (self.sequence_length - len(ep)))
 
-        # Transpose and pad sequences
-        transposed = list(zip(*[[(torch.tensor(item[0]),
-                                  torch.tensor(item[1]),
-                                  torch.tensor(item[2]),
-                                  torch.tensor(item[3]),
-                                  torch.tensor(item[4]),
-                                  torch.tensor(item[5]),
-                                  torch.tensor(item[6]),
-                                  torch.tensor(item[7]),
-                                  torch.tensor(item[8]),
-                                  torch.tensor(item[9]),
-                                  torch.tensor(item[10])) for item in seq] for seq in batch]))
+        # Now, batch is a list of length batch_size, each element is a list of sequence_length tuples
 
-        batched_tensors = []
-        for group in transposed:
-            batched_tensors.append(torch.stack([torch.stack(step) for step in group]).to(device))
+        # Unzip all elements
+        poses, occ_patches, belief_patches, target_object_ids, actions, rewards, next_poses, next_occ_patches, next_belief_patches, next_target_object_ids, dones = zip(
+            *[step for episode in batch for step in episode]
+        )
 
-        return batched_tensors
+        # Reshape to [batch_size, sequence_length, ...]
+        def stack_and_reshape(tensors, shape):
+            stacked = torch.stack(tensors).to(device)
+            return stacked.view(batch_size, self.sequence_length, *shape)
+
+        poses = stack_and_reshape(poses, poses[0].shape)
+        occ_patches = stack_and_reshape(occ_patches, occ_patches[0].shape)
+        belief_patches = stack_and_reshape(belief_patches, belief_patches[0].shape)
+        target_object_ids = stack_and_reshape(target_object_ids, target_object_ids[0].shape)
+        actions = torch.tensor(actions, device=device).view(batch_size, self.sequence_length)
+        rewards = torch.tensor(rewards, device=device).view(batch_size, self.sequence_length)
+        next_poses = stack_and_reshape(next_poses, next_poses[0].shape)
+        next_occ_patches = stack_and_reshape(next_occ_patches, next_occ_patches[0].shape)
+        next_belief_patches = stack_and_reshape(next_belief_patches, next_belief_patches[0].shape)
+        next_target_object_ids = stack_and_reshape(next_target_object_ids, next_target_object_ids[0].shape)
+        dones = torch.tensor(dones, dtype=torch.bool, device=device).view(batch_size, self.sequence_length)
+
+        return (poses, occ_patches, belief_patches, target_object_ids,
+                actions, rewards, next_poses, next_occ_patches,
+                next_belief_patches, next_target_object_ids, dones)
+
 
     def __len__(self):
         return len(self.buffer)
     
-def select_action(policy_net, pose, occupancy_patch, belief_patch, goal, num_actions, hidden_state=None, epsilon=0.1):
+def select_action(policy_net, pose, occupancy_patch, belief_patch, goal, num_actions, hidden_state, epsilon=0.1):
     """
     Select an action using epsilon-greedy policy.
     Args:

@@ -20,7 +20,9 @@ def init_pose_tensor(grid_position, grid_resolution, agent_yaw, device='cuda'):
         agent_yaw / 360.0
     ]
 
-    return torch.tensor(pose_values, dtype=torch.float32, device=device)
+    # Convert to tensor and ensure correct type
+    pose = torch.tensor(pose_values, dtype=torch.float32, device=device)
+    return pose
 
 def init_occupancy_patch(grid_position, grid_resolution, grid_map, patch_size, device='cuda'):
     """
@@ -52,10 +54,12 @@ def init_occupancy_patch(grid_position, grid_resolution, grid_map, patch_size, d
             if 0 <= gx < grid_resolution[0] and 0 <= gz < grid_resolution[1]:
                 if grid_map[gx, gz, 0] == 255:
                     occ_patch[px, pz] = 0.0
-            else:
-                occ_patch[px, pz] = 0.0
 
-    return torch.from_numpy(occ_patch).to(device)
+    # Convert to tensor and ensure correct type
+    occ_patch = torch.from_numpy(occ_patch).to(device)
+    occ_patch = occ_patch.unsqueeze(0)  # Add channel dimensions [1]
+
+    return occ_patch
 
 def init_belief_patch(grid_position, grid_resolution, grid_map, belief_map, 
                       patch_size, num_classes, device='cuda'):
@@ -90,11 +94,45 @@ def init_belief_patch(grid_position, grid_resolution, grid_map, belief_map,
             pz = dz + half_patch
 
             if 0 <= gx < grid_resolution[0] and 0 <= gz < grid_resolution[1]:
-                if grid_map[gx, gz, 0] == 255:
-                    belief_patch[px, pz] = all_zeros
-                else:
+                if grid_map[gx, gz, 0] != 255:
                     belief_patch[px, pz] = belief_map[gx][gz]
-            else:
-                belief_patch[px, pz] = all_zeros
 
-    return torch.from_numpy(belief_patch).to(device)
+    belief_patch = torch.from_numpy(belief_patch).to(device)
+
+    return belief_patch.permute(2, 0, 1)  # Change to (num_classes, patch_size, patch_size)
+
+def batch_single_sample(pose, occupancy_patch, belief_patch, goal, hidden_state=None):
+    """
+    Batch a single sample for DQN input.
+
+    Args:
+        pose (torch.Tensor): Current pose tensor.
+        occupancy_patch (torch.Tensor): Occupancy patch tensor.
+        belief_patch (torch.Tensor): Belief patch tensor.
+        goal (torch.Tensor): Goal tensor.
+        num_actions (int): Number of possible actions.
+        hidden_state (torch.Tensor, optional): Hidden state for LSTM.
+
+    Returns:
+        tuple: Batched tensors ready for DQN input.
+    """
+    return (pose.unsqueeze(0), occupancy_patch.unsqueeze(0), belief_patch.unsqueeze(0),
+            goal, hidden_state)
+
+def unbatch_single_sample(batch_pose, batch_occupancy_patch, batch_belief_patch, batch_goal, batch_hidden_state=None):
+    """
+    Unbatch a single sample from DQN input.
+
+    Args:
+        batch_pose (torch.Tensor): Batched pose tensor.
+        batch_occupancy_patch (torch.Tensor): Batched occupancy patch tensor.
+        batch_belief_patch (torch.Tensor): Batched belief patch tensor.
+        batch_goal (torch.Tensor): Batched goal tensor.
+        batch_hidden_state (torch.Tensor, optional): Batched hidden state for LSTM.
+
+    Returns:
+        tuple: Individual tensors for DQN input.
+    """
+    return (batch_pose.squeeze(0), batch_occupancy_patch.squeeze(0), batch_belief_patch.squeeze(0),
+            batch_goal, batch_hidden_state)
+

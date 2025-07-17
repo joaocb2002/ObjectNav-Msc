@@ -159,8 +159,8 @@ def non_max_suppression(
 
         output[xi] = x[i[:max_det]]
 
-        if torch.cuda.is_available() and torch.cuda.max_memory_allocated() > 1e9:
-            LOGGER.warning("High memory usage detected during NMS (>1GB allocated)")
+        # if torch.cuda.is_available() and torch.cuda.max_memory_allocated() > 1e9:
+        #     LOGGER.warning("High memory usage detected during NMS (>1GB allocated)")
 
     return output
 
