@@ -7,15 +7,14 @@ class ObjectSearchAgent(nn.Module):
     def __init__(self, num_classes=27, num_actions=3, patch_size=9, goal_embedding_dim=32):
         super(ObjectSearchAgent, self).__init__()
 
+        # Init parameters
         self.num_classes = num_classes
         self.num_actions = num_actions
         self.patch_size = patch_size
         self.goal_embedding_dim = goal_embedding_dim
 
-        # Goal embedding
         self.goal_embedding = nn.Embedding(num_classes, goal_embedding_dim)
 
-        # Pose encoder (x_norm, y_norm, orientation_norm)
         self.pose_fc = nn.Sequential(
             nn.Linear(3, 64),
             nn.ReLU(),
@@ -23,7 +22,6 @@ class ObjectSearchAgent(nn.Module):
             nn.ReLU()
         )
 
-        # Occupancy encoder: CNN
         self.occupancy_cnn = nn.Sequential(
             nn.Conv2d(1, 16, kernel_size=3, padding=1),
             nn.ReLU(),
@@ -32,7 +30,6 @@ class ObjectSearchAgent(nn.Module):
             nn.Flatten()
         )
 
-        # Belief map encoder: CNN
         self.belief_cnn = nn.Sequential(
             nn.Conv2d(num_classes, 32, kernel_size=3, padding=1),
             nn.ReLU(),
@@ -41,19 +38,17 @@ class ObjectSearchAgent(nn.Module):
             nn.Flatten()
         )
 
-        # Calculate CNN output size dynamically
+        # Sample tensors to determine output dimensions
         sample_tensor = torch.zeros(1, 1, patch_size, patch_size)
         occ_out_dim = self.occupancy_cnn(sample_tensor).shape[1]
         belief_sample_tensor = torch.zeros(1, num_classes, patch_size, patch_size)
         belief_out_dim = self.belief_cnn(belief_sample_tensor).shape[1]
 
-        # Combined feature size
+        # Calculate combined size for LSTM input
         combined_size = 128 + occ_out_dim + belief_out_dim + goal_embedding_dim
 
-        # LSTM
         self.lstm = nn.LSTM(combined_size, 512, batch_first=True, num_layers=2)
 
-        # Dueling DQN heads
         self.fc_value = nn.Sequential(
             nn.Linear(512, 256),
             nn.ReLU(),
@@ -68,27 +63,55 @@ class ObjectSearchAgent(nn.Module):
 
     def forward(self, pose, occupancy_patch, belief_patch, goal, hidden_state=None):
 
-        # Make sure goal is a 1D tensor
-        if goal.dim() > 1:
-            goal = goal.view(-1)
-        
-        # Encode inputs
-        pose_encoded = self.pose_fc(pose)
-        occ_encoded = self.occupancy_cnn(occupancy_patch)
-        belief_encoded = self.belief_cnn(belief_patch)
-        goal_encoded = self.goal_embedding(goal)
+        pose, occupancy_patch, belief_patch, goal = self._normalize_inputs(pose, occupancy_patch, belief_patch, goal)
 
-        # Concatenate features
+        # Get batch and sequence dimensions
+        batch_size, seq_len = pose.shape[:2]
+
+        # Reshape for feature encoders
+        pose_flat = pose.reshape(batch_size * seq_len, -1)
+        occ_flat = occupancy_patch.reshape(batch_size * seq_len, *occupancy_patch.shape[2:])
+        belief_flat = belief_patch.reshape(batch_size * seq_len, *belief_patch.shape[2:])
+        goal_flat = goal.reshape(batch_size * seq_len)
+
+        # Encode features
+        pose_encoded = self.pose_fc(pose_flat)
+        occ_encoded = self.occupancy_cnn(occ_flat)
+        belief_encoded = self.belief_cnn(belief_flat)
+        goal_encoded = self.goal_embedding(goal_flat)
+
+        # Reshape encoded features to match LSTM input
         fused = torch.cat([pose_encoded, occ_encoded, belief_encoded, goal_encoded], dim=1)
-        fused = fused.unsqueeze(1)  # For LSTM (batch_size, seq_len=1, features)
+        fused = fused.view(batch_size, seq_len, -1)
 
         lstm_out, hidden_state = self.lstm(fused, hidden_state)
 
-        value = self.fc_value(lstm_out[:, -1])
-        advantage = self.fc_advantage(lstm_out[:, -1])
+        last_output = lstm_out  # Use all timesteps
+
+        value = self.fc_value(last_output)
+        advantage = self.fc_advantage(last_output)
         q_values = value + advantage - advantage.mean(dim=1, keepdim=True)
 
         return q_values, hidden_state
+
+    def _normalize_inputs(self, pose, occupancy_patch, belief_patch, goal):
+        """ Check if batch and sequence dimensions are missing and add them """
+
+        # One step input
+        if pose.dim() == 1:
+            pose = pose.unsqueeze(0).unsqueeze(0)
+            occupancy_patch = occupancy_patch.unsqueeze(0).unsqueeze(0)
+            belief_patch = belief_patch.unsqueeze(0).unsqueeze(0)
+            goal = goal.unsqueeze(0).unsqueeze(0)
+
+        # Batch input
+        elif pose.dim() == 2:
+            pose = pose.unsqueeze(0)
+            occupancy_patch = occupancy_patch.unsqueeze(0)
+            belief_patch = belief_patch.unsqueeze(0)
+            goal = goal.unsqueeze(0)
+
+        return pose, occupancy_patch, belief_patch, goal
 
 class SequenceReplayBuffer:
     def __init__(self, capacity=1000, sequence_length=10):

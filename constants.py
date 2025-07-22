@@ -19,7 +19,7 @@ MAP_RESOLUTION = 0.01 # 1 cm
 CONFIDENCE_THRESHOLD = 0.85
 LOCATION_ERROR_THRESHOLD = 0.50 # 50 cm
 MAX_ITER_COEF = 0.75 # Coefficient to determine maximum iterations based on free cells
-PSEUDO_COUNT_THRESHOLD = 13.0 # Equivalent to probability of 0.3333
+PSEUDO_COUNT_THRESHOLD = 27.0 # Equivalent to probability of 0.5
 NUM_EPOCHS = 100
 
 # VALID ACTIONS

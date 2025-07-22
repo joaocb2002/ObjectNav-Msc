@@ -83,8 +83,7 @@ def init_belief_patch(grid_position, grid_resolution, grid_map, belief_map,
     cx, cz = grid_position
     half_patch = patch_size // 2
 
-    belief_patch = np.ones((patch_size, patch_size, num_classes), dtype=np.float32)
-    all_zeros = np.zeros((num_classes,), dtype=np.float32)
+    belief_patch = np.ones((patch_size, patch_size, num_classes), dtype=np.float32) / num_classes  # Initialize with uniform distribution
 
     for dx in range(-half_patch, half_patch + 1):
         for dz in range(-half_patch, half_patch + 1):
@@ -95,7 +94,12 @@ def init_belief_patch(grid_position, grid_resolution, grid_map, belief_map,
 
             if 0 <= gx < grid_resolution[0] and 0 <= gz < grid_resolution[1]:
                 if grid_map[gx, gz, 0] != 255:
-                    belief_patch[px, pz] = belief_map[gx][gz]
+                    belief = belief_map[gx][gz]
+                    if belief.sum() > 0:
+                        belief_patch[px, pz] = belief / belief.sum()
+                    else:
+                        belief_patch[px, pz] = np.zeros(num_classes)
+
 
     belief_patch = torch.from_numpy(belief_patch).to(device)
 
