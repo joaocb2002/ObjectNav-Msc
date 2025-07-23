@@ -1,3 +1,7 @@
+# simsettings.py
+"""
+This module provides functions to create simulator configurations for the Habitat simulator.
+"""
 import habitat_sim
 
 # Function to create the simulator configuration
@@ -6,7 +10,7 @@ def make_cfg(settings):
     Description:
         Creates and returns a Habitat simulator configuration using settings 
         provided in a dictionary. This includes simulator, sensor, and agent setup.
-    
+     
     Arguments:
         settings (dict): A dictionary containing the following keys:
             - "dataset" (str): Path to the scene dataset config file.
@@ -54,3 +58,27 @@ def make_cfg(settings):
     }
 
     return habitat_sim.Configuration(sim_cfg, [agent_cfg])
+
+# Function to create NavMesh settings
+def create_navmesh_settings(agent_height, agent_radius, max_climb=0.2, max_slope=45.0, include_static_objects=True):
+    """
+    Description:
+        Creates and returns NavMesh settings for the Habitat simulator.
+
+    Arguments:
+        agent_height (float): Height of the agent.  
+        agent_radius (float): Radius of the agent.
+        max_climb (float): Maximum height the agent can climb.
+        max_slope (float): Maximum slope the agent can traverse.
+        include_static_objects (bool): Whether to include static objects in the NavMesh.
+    
+    Returns:
+        habitat_sim.NavMeshSettings: The NavMesh settings configured for the agent.
+    """
+    navmesh_settings = habitat_sim.NavMeshSettings()
+    navmesh_settings.agent_height = agent_height
+    navmesh_settings.agent_radius = agent_radius
+    navmesh_settings.agent_max_climb = max_climb
+    navmesh_settings.agent_max_slope = max_slope
+    navmesh_settings.include_static_objects = include_static_objects
+    return navmesh_settings

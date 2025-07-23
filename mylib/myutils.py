@@ -1,10 +1,73 @@
-import numpy as np
-import matplotlib.pyplot as plt
+# myutils.py
+"""
+Utility functions for processing maps and handling quaternions in the ObjectNav-Msc project.
+"""
 import cv2
 import math
 import quaternion
+import numpy as np
+import matplotlib.pyplot as plt
 from scipy.ndimage import label, binary_dilation
+from habitat.utils.visualizations import maps
 
+### Map Processing Functions ###
+def process_raw_topdown_map(raw_map):
+    """
+    Processes a raw occupancy grid map by converting it to RGB, adding axis arrows, and retaining the largest white chunk.
+    
+    Args:
+        raw_map (np.array): 2D numpy array of shape (H, W) with values 0, 1, or 2.
+
+    Returns:
+        np.array: Processed map with the same shape as the input.
+        tuple: Tuple containing the processed map and its first two dimensions (H, W).
+    """
+
+    processed_map = map_to_rgb(raw_map)
+    processed_map = retain_largest_white_chunk(processed_map)
+    processed_map = add_axis_to_map(processed_map)
+
+    return processed_map, processed_map.shape[:2]
+
+def process_raw_grid_map(raw_map, pathfinder):
+    """
+    Processes a raw occupancy grid map by converting it to RGB, adding axis arrows, and retaining the largest white chunk.
+    
+    Args:
+        raw_map (np.array): 2D numpy array of shape (H, W) with values 0, 1, or 2.
+
+    Returns:
+        np.array: Processed map with the same shape as the input.
+        tuple: Tuple containing the processed map and its first two dimensions (H, W).
+    """
+
+    processed_grid = map_to_rgb(raw_map)
+    processed_grid = retain_largest_white_chunk(processed_grid)
+    processed_grid = filter_grid_map(processed_grid, processed_grid.shape[:2], pathfinder)
+    processed_grid = retain_largest_white_chunk(processed_grid)
+
+    return processed_grid, processed_grid.shape[:2]
+
+def find_free_cells(grid_map, grid_resolution, topdown_map, topdown_resolution, pathfinder):
+    grid_free_cells, map_free_cells, world_free_coords = [], [], []
+
+    for x_g in range(grid_resolution[0]):
+        for y_g in range(grid_resolution[1]):
+            if not is_white_pixel(grid_map, x_g, y_g):
+                continue
+
+            real_z, real_x = get_real_world_position(x_g, y_g, grid_resolution, pathfinder)
+            map_x, map_y = get_topdown_position(real_x, real_z, topdown_resolution, pathfinder)
+
+            if is_navigable_position(real_x, real_z, pathfinder) and is_white_pixel(topdown_map, map_x, map_y):
+                grid_free_cells.append([x_g, y_g])
+                map_free_cells.append([map_x, map_y])
+                world_free_coords.append([real_x, 0.0, real_z])
+
+    return grid_free_cells, map_free_cells, world_free_coords
+
+
+### Secondary Map Processing Functions ###
 def map_to_rgb(image):
     """
     Converts a 2D numpy array (H, W) where each element is a label (0, 1, or 2)
@@ -76,95 +139,25 @@ def add_axis_to_map(image, arrow_length_ratio=0.075):
     font = cv2.FONT_HERSHEY_SIMPLEX
     thickness = 2
 
-    # Define text offsets
-
     # Draw labels
     cv2.putText(image_copy, 'X', (int(x_end[0] + arrow_len / 3), int(x_end[1] + arrow_len / 5)), font, font_scale, (17, 17, 132), thickness)
     cv2.putText(image_copy, 'Z', (int(z_end[0] + arrow_len / 5), int(z_end[1] + arrow_len / 3)), font, font_scale, (17, 17, 132), thickness)
 
     return image_copy
 
-def plot_two_maps(topdown_map: np.ndarray, occ_grid_map: np.ndarray):
-    """
-    Plots two images side by side: the scene map and the occupancy grid map.
-
-    Args:
-        topdown_map (np.ndarray): Image of the full scene or environment.
-        occ_grid_map (np.ndarray): Raw occupancy grid (e.g., binary values).
-    """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))
-
-    # Top-down map
-    ax1.imshow(topdown_map)
-    ax1.set_title('scene map')
-    ax1.axis('off')
-
-    # Occupancy grid map
-    rows, cols = occ_grid_map.shape[:2]
-    ax2.imshow(occ_grid_map, cmap='gray')
-    ax2.set_title('occ grid map')
-    ax2.axis('off')
-    for row in range(1, rows):
-        ax2.axhline(y=row-0.5, color='black', linewidth=0.5)  # Horizontal grid lines
-    for col in range(1, cols):
-        ax2.axvline(x=col-0.5, color='black', linewidth=0.5)  # Vertical grid lines
-
-    # Plot red dots at the center of each cell
-    for row in range(0, rows):
-        for col in range(0, cols):
-            # Only plot a red dot for non-zero cells
-            if occ_grid_map[row, col, 0] > 128:
-                plt.plot(col, row, marker='o', color='red', markersize=1)
-
-    plt.tight_layout()
-    plt.show()
-
-def quaternion_to_yaw(q):
-    """
-    Convert a quaternion.quaternion object to yaw angle in degrees.
-    Assumes Y is the up axis (rotation around Y).
-    """
-    w = q.w
-    x = q.x
-    y = q.y
-    z = q.z
-    # Yaw (around Y-axis)
-    siny_cosp = 2 * (w * y + x * z)
-    cosy_cosp = 1 - 2 * (y * y + z * z)
-    yaw_rad = math.atan2(siny_cosp, cosy_cosp)
-    return math.degrees(yaw_rad)
-
-def yaw_to_quaternion(yaw_deg):
-    """
-    Convert a yaw angle in degrees to a quaternion.quaternion,
-    rotating around the Y axis.
-    """
-    yaw_rad = math.radians(yaw_deg)
-    half_yaw = yaw_rad / 2
-    w = math.cos(half_yaw)
-    x = 0
-    y = math.sin(half_yaw)
-    z = 0
-    return quaternion.quaternion(w, x, y, z)
-
-def bin_index(scale, bin_vector):
-    """
-    Computes the bin index for a given scale and bin vector.
-    """
-    bin_index = -1
-    for i in range(len(bin_vector)):
-        if scale <= bin_vector[i] or scale > bin_vector[-1]:
-            break
-        bin_index += 1
-
-    if bin_index == -1: bin_index = 0
-
-    return bin_index
-
-import numpy as np
-from scipy.ndimage import label, binary_dilation
-
 def retain_largest_white_chunk(grid):
+    """    
+    Retains only the largest contiguous white chunk in a 3D RGB grid, converting all other
+    white pixels to grey. The function also checks if the boundary of the chunk is enclosed
+    and only retains chunks that are fully enclosed by black pixels.
+
+    Parameters:
+        grid (np.ndarray): 3D numpy array of shape (H, W, 3) representing the RGB grid.
+    
+    Returns:
+        np.ndarray: Processed grid with only the largest white chunk retained as white,
+                    and all other white pixels converted to grey.
+    """
     white = np.array([255, 255, 255])
     black = np.array([0, 0, 0])
     grey = np.array([128, 128, 128])
@@ -211,7 +204,104 @@ def retain_largest_white_chunk(grid):
 
     return grid
 
+def filter_grid_map(grid_map, grid_resolution, pathfinder):
 
+    """
+    Filters the grid map by marking non-navigable positions as grey.
+   
+    Parameters:
+        grid_map (np.ndarray): 3D numpy array representing the grid map.
+        grid_resolution (tuple): Resolution of the grid (height, width).
+        pathfinder (habitat.PathFinder): Pathfinder object to check navigability.
+    """
+    for x_g in range(grid_resolution[0]):
+        for y_g in range(grid_resolution[1]):
+            if not is_white_pixel(grid_map, x_g, y_g):
+                continue
+
+            real_z, real_x = get_real_world_position(x_g, y_g, grid_resolution, pathfinder)
+            
+            if not is_navigable_position(real_x, real_z, pathfinder):
+                mark_pixel_grey(grid_map, x_g, y_g)
+
+    return grid_map
+
+
+### Navigation Functions ###
+def get_real_world_position(x_g, y_g, grid_resolution, pathfinder):
+    """
+    Converts grid coordinates (x_g, y_g) to real-world coordinates using the grid resolution
+    and the pathfinder.
+
+    Parameters:
+        x_g (int): X coordinate in the grid.
+        y_g (int): Y coordinate in the grid.
+        grid_resolution (tuple): Resolution of the grid (height, width).
+        pathfinder (habitat.PathFinder): Pathfinder object to convert grid to real-world coordinates.
+
+    Returns:
+        tuple: Real-world coordinates (real_z, real_x).
+    """
+    return maps.from_grid(x_g, y_g, grid_resolution, pathfinder=pathfinder)
+
+def get_topdown_position(real_world_x, real_world_z, topdown_resolution, pathfinder):
+    """
+    Converts real-world coordinates (real_world_x, real_world_z) to top-down map coordinates
+    using the top-down resolution and the pathfinder.
+
+    Parameters:
+        real_world_x (float): X coordinate in the real world.
+        real_world_z (float): Z coordinate in the real world.
+        topdown_resolution (tuple): Resolution of the top-down map (height, width).
+        pathfinder (habitat.PathFinder): Pathfinder object to convert real-world to top-down coordinates.
+
+    Returns:
+        tuple: Top-down map coordinates (map_x, map_y).
+    """
+    return maps.to_grid(real_world_z, real_world_x, topdown_resolution, pathfinder=pathfinder)
+
+def is_navigable_position(real_world_x, real_world_z, pathfinder):
+    """
+    Checks if a real-world position (real_world_x, real_world_z) is navigable
+    using the pathfinder.
+
+    Parameters:
+        real_world_x (float): X coordinate in the real world.
+        real_world_z (float): Z coordinate in the real world.
+        pathfinder (habitat.PathFinder): Pathfinder object to check navigability.
+
+    Returns:
+        bool: True if the position is navigable, False otherwise.
+    """
+    return pathfinder.is_navigable([real_world_x, 0.0, real_world_z])
+
+
+### Utility Functions ###
+def is_white_pixel(grid_map, x, y):
+    """
+    Checks if the pixel at (x, y) in the grid map is white.
+
+    Parameters:
+        grid_map (np.ndarray): 3D numpy array representing the grid map.
+        x (int): X coordinate of the pixel.
+        y (int): Y coordinate of the pixel.
+    Returns:
+        bool: True if the pixel is white, False otherwise.
+    """
+    return grid_map[x, y, 0] == 255
+
+def mark_pixel_grey(grid_map, x, y):
+    """
+    Marks the pixel at (x, y) in the grid map as grey.
+    Parameters:
+        grid_map (np.ndarray): 3D numpy array representing the grid map.
+        x (int): X coordinate of the pixel.
+        y (int): Y coordinate of the pixel.
+    """
+    grid_map[x, y, :] = [128, 128, 128]
+
+
+### Bounding Box Scale Function ###
 def compute_bbox_scale(bbox, rgb):
     """
     Computes the scale of a bounding box area relative to the RGB image area.
@@ -235,3 +325,34 @@ def compute_bbox_scale(bbox, rgb):
     scale = 100*bbox_area / rgb_area
 
     return scale
+
+
+### Quaternion and Yaw Functions ###
+def quaternion_to_yaw(q):
+    """
+    Convert a quaternion.quaternion object to yaw angle in degrees.
+    Assumes Y is the up axis (rotation around Y).
+    """
+    w = q.w
+    x = q.x
+    y = q.y
+    z = q.z
+    # Yaw (around Y-axis)
+    siny_cosp = 2 * (w * y + x * z)
+    cosy_cosp = 1 - 2 * (y * y + z * z)
+    yaw_rad = math.atan2(siny_cosp, cosy_cosp)
+    return math.degrees(yaw_rad)
+
+def yaw_to_quaternion(yaw_deg):
+    """
+    Convert a yaw angle in degrees to a quaternion.quaternion,
+    rotating around the Y axis.
+    """
+    yaw_rad = math.radians(yaw_deg)
+    half_yaw = yaw_rad / 2
+    w = math.cos(half_yaw)
+    x = 0
+    y = math.sin(half_yaw)
+    z = 0
+    return quaternion.quaternion(w, x, y, z)
+

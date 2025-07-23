@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from collections import deque
 import random
 
 class ObjectSearchAgent(nn.Module):
