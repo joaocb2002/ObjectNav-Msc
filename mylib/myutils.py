@@ -66,6 +66,24 @@ def find_free_cells(grid_map, grid_resolution, topdown_map, topdown_resolution, 
 
     return grid_free_cells, map_free_cells, world_free_coords
 
+def find_occupied_cells(grid_map, grid_resolution, topdown_map, topdown_resolution, pathfinder):
+    grid_occ_cells, map_occ_cells, world_occ_coords = [], [], []
+
+    for x_g in range(grid_resolution[0]):
+        for y_g in range(grid_resolution[1]):
+            if not is_white_pixel(grid_map, x_g, y_g):
+                continue
+
+            real_z, real_x = get_real_world_position(x_g, y_g, grid_resolution, pathfinder)
+            map_x, map_y = get_topdown_position(real_x, real_z, topdown_resolution, pathfinder)
+
+            if not(is_navigable_position(real_x, real_z, pathfinder) and is_white_pixel(topdown_map, map_x, map_y)):
+                grid_occ_cells.append([x_g, y_g])
+                map_occ_cells.append([map_x, map_y])
+                world_occ_coords.append([real_x, 0.0, real_z])
+
+    return grid_occ_cells, map_occ_cells, world_occ_coords
+
 
 ### Secondary Map Processing Functions ###
 def map_to_rgb(image):
@@ -356,3 +374,20 @@ def yaw_to_quaternion(yaw_deg):
     z = 0
     return quaternion.quaternion(w, x, y, z)
 
+
+### Vector Processing Functions ###
+def normalize_array(arr, eps=1e-5):
+    """Normalize a NumPy array to the [0, 1] range, with edge-case handling."""
+    arr = np.array(arr)
+    min_val, max_val = np.min(arr), np.max(arr)
+    if abs(max_val - min_val) > eps:
+        return (arr - min_val) / (max_val - min_val)
+    else:
+        return np.zeros_like(arr)
+
+def process_metrics(distances, avg_entropies, avg_target_probs):
+    """Convert to arrays and normalize all three metrics."""
+    distances = normalize_array(distances)
+    avg_entropies = normalize_array(avg_entropies)
+    avg_target_probs = normalize_array(avg_target_probs)
+    return distances, avg_entropies, avg_target_probs

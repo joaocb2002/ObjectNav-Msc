@@ -561,8 +561,6 @@ def check_target_probability_in_entropy_map(belief_map, grid_cells, target_class
         return False, None
 
 
-
-
 # -----------------------------
 # Sensor Functions
 # -----------------------------
