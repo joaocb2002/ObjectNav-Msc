@@ -71,18 +71,17 @@ def find_occupied_cells(grid_map, grid_resolution, topdown_map, topdown_resoluti
 
     for x_g in range(grid_resolution[0]):
         for y_g in range(grid_resolution[1]):
-            if not is_white_pixel(grid_map, x_g, y_g):
-                continue
 
             real_z, real_x = get_real_world_position(x_g, y_g, grid_resolution, pathfinder)
             map_x, map_y = get_topdown_position(real_x, real_z, topdown_resolution, pathfinder)
 
-            if not(is_navigable_position(real_x, real_z, pathfinder) and is_white_pixel(topdown_map, map_x, map_y)):
+            if not is_navigable_position(real_x, real_z, pathfinder) or not is_white_pixel(topdown_map, map_x, map_y) or not is_white_pixel(grid_map, x_g, y_g):
                 grid_occ_cells.append([x_g, y_g])
                 map_occ_cells.append([map_x, map_y])
                 world_occ_coords.append([real_x, 0.0, real_z])
 
     return grid_occ_cells, map_occ_cells, world_occ_coords
+
 
 
 ### Secondary Map Processing Functions ###
