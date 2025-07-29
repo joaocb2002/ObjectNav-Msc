@@ -197,61 +197,128 @@
     },
     {
         "index": 28,
-        "scene": "ProcTHOR-Train-112",
-        "target_object": "cup",
-        "target_object_id": 41,
-        "target_object_location": [ -9.938852310180664, 0.8145942122116685, 5.958631992340088 ]
-    },
+        "scene": "ProcTHOR-Train-4957",
+        "target_object": "microwave",
+        "target_object_id": 68,
+        "target_object_location": [-2.701634508766377,0.9472997571865562,8.851249418923489]
+    },  
     {
         "index": 29,
-        "scene": "ProcTHOR-Train-1144",
-        "target_object": "sink",
-        "target_object_id": 71,
-        "target_object_location": [-0.38634596168994906,0.0,3.715123523831368]
+        "scene": "ProcTHOR-Train-4958",
+        "target_object": "toilet",
+        "target_object_id": 61,
+        "target_object_location": [-0.5988963406727915,1.7526781448395923e-07,6.944144248570545]
     },
     {
         "index": 30,
-        "scene": "ProcTHOR-Train-2003",
-        "target_object": "cup",
-        "target_object_id": 41,
-        "target_object_location": [-0.8267626166343689,0.9443606212735176,0.48148101568222046]
+        "scene": "ProcTHOR-Train-4962",
+        "target_object": "toaster",
+        "target_object_id": 70,
+        "target_object_location": [-7.212059630453586,0.9470866529329214,10.18853965192135]
     },
     {
         "index": 31,
-        "scene": "ProcTHOR-Train-4003",
-        "target_object": "cup",
-        "target_object_id": 41,
-        "target_object_location": [-0.1279931906610765,0.144051628857851,10.848615653261426]
+        "scene": "ProcTHOR-Train-4963",
+        "target_object": "potted plant",
+        "target_object_id": 58,
+        "target_object_location": [-9.671131365001202,0.7431214153766632,6.410288855433464]
     },
     {
         "index": 32,
-        "scene": "ProcTHOR-Train-112",
-        "target_object": "laptop",
-        "target_object_id": 63,
-        "target_object_location": [-2.7019927501678467,0.8370066356592074,2.7020478397607803]
+        "scene": "ProcTHOR-Train-8005",
+        "target_object": "cup",
+        "target_object_id": 41,
+        "target_object_location": [-3.32831908762455,0.7356411064013078,4.347039222717285]
     },
     {
         "index": 33,
-        "scene": "ProcTHOR-Train-120",
-        "target_object": "laptop",
-        "target_object_id": 63,
-        "target_object_location": [-4.388556361332703,0.46572605818735285,12.68326727300861]
+        "scene": "ProcTHOR-Train-8009",
+        "target_object": "couch",
+        "target_object_id": 57,
+        "target_object_location": [-7.173198739051818,0.0111295246751979,3.732157393455506]
     },
     {
         "index": 34,
-        "scene": "ProcTHOR-Train-13",
-        "target_object": "laptop",
-        "target_object_id": 63,
-        "target_object_location": [-8.015352711081482,0.7035654854707614,7.512202725270831]
+        "scene": "ProcTHOR-Train-8014",
+        "target_object": "couch",
+        "target_object_id": 57,
+        "target_object_location": [-4.929980870366098,0.0025095126184169203,0.9345120429992674]
     },
     {
         "index": 35,
-        "scene": "ProcTHOR-Train-137",
-        "target_object": "laptop",
-        "target_object_id": 63,
-        "target_object_location": [-9.458329380246356,0.8382338655010942,5.439706802368164]
+        "scene": "ProcTHOR-Train-9004",
+        "target_object": "bowl",
+        "target_object_id": 45,
+        "target_object_location": [-0.9979865550994873,0.9436787441372871,10.50973129272461]
+    },
+    {
+        "index": 36,
+        "scene": "ProcTHOR-Train-3026",
+        "target_object": "book",
+        "target_object_id": 73,
+        "target_object_location": [-3.7539421562142206,0.685045490017425,3.681613840162754]
+    },
+    {
+        "index": 37,
+        "scene": "ProcTHOR-Train-3029",
+        "target_object": "dining table",
+        "target_object_id": 60,
+        "target_object_location": [-7.131778988599777,0.0018250644207000732,5.652297822237006]
+    },
+    {
+        "index": 38,
+        "scene": "ProcTHOR-Train-1572",
+        "target_object": "toaster",
+        "target_object_id": 70,
+        "target_object_location": [-0.4833075718641285,0.9412794046103954,6.096687481552363]
+    },
+    {
+        "index": 39,
+        "scene": "ProcTHOR-Train-1573",
+        "target_object": "apple",
+        "target_object_id": 47,
+        "target_object_location": [-0.9401550330221653,0.9887817809358239,7.851726345717907]
+    },
+    {
+        "index": 40,
+        "scene": "ProcTHOR-Train-1581",
+        "target_object": "cell phone",
+        "target_object_id": 67,
+        "target_object_location": [-4.047929763793945,0.5796332528814674,8.725274085998535]
+    },
+    {
+        "index": 41,
+        "scene": "ProcTHOR-Train-1585",
+        "target_object": "chair",
+        "target_object_id": 56,
+        "target_object_location": [-3.8816618420281324,0.004799544811248779,9.574329687060603]
+    },
+    {
+        "index": 42,
+        "scene": "ProcTHOR-Train-1704",
+        "target_object": "teddy bear",
+        "target_object_id": 77,
+        "target_object_location": [-3.739265295063188,0.6543803810267679,25.68550185799786]
+    },
+    {
+        "index": 43,
+        "scene": "ProcTHOR-Train-1709",
+        "target_object": "wine glass",
+        "target_object_id": 40,
+        "target_object_location": [-0.5604962110519409,0.9931235939636827,9.0889253616333]
+    },
+    {
+        "index": 44,
+        "scene": "ProcTHOR-Train-1714",
+        "target_object": "knife",
+        "target_object_id": 43,
+        "target_object_location": [-0.5604962110519409,0.9931235939636827,9.0889253616333]
+    },
+    {
+        "index": 45,
+        "scene": "ProcTHOR-Train-801",
+        "target_object": "vase",
+        "target_object_id": 75,
+        "target_object_location": [-7.731032811105251,0.8223980307928287,5.058559417724609]
     }
 ]
-
-
-
