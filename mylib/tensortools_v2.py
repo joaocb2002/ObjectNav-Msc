@@ -153,6 +153,22 @@ def update_previous_poses_buffer(previous_poses_buffer, next_pose, max_size=10):
         previous_poses_buffer.pop(0)  # Keep only the last `max_size` poses
     return previous_poses_buffer
 
+def update_previous_cells_buffer(previous_cells_buffer, next_cell, max_size=10):
+    """
+    Updates the buffer of previous cells with the new cell.
+
+    Args:
+        previous_cells_buffer (list): List of previous cells.
+        next_cell (tuple): New cell coordinates to add (z, x).
+        max_size (int): Maximum size of the buffer.
+
+    Returns:
+        list: Updated buffer containing the last `max_size` cells.
+    """
+    previous_cells_buffer.append(next_cell)
+    if len(previous_cells_buffer) > max_size:
+        previous_cells_buffer.pop(0)  # Keep only the last `max_size` cells
+    return previous_cells_buffer
 
 # def batch_single_sample(pose, occupancy_patch, belief_patch, goal, hidden_state=None):
 #     """

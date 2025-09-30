@@ -44,14 +44,25 @@ class ObjectSearchAgent(nn.Module):
             nn.ReLU()
         )
 
-        # Final fusion and Q-value head
-        self.fc = nn.Sequential(
+        # Shared hidden layer
+        self.shared_fc = nn.Sequential(
             nn.Linear(cnn_output_dim + 128, 512),
-            nn.ReLU(),
+            nn.ReLU()
+        )
+
+        # Dueling streams
+        self.value_stream = nn.Sequential(
             nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(256, num_actions)
+            nn.Linear(256, 1)
         )
+
+        self.advantage_stream = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, self.num_actions)
+        )
+
 
     def forward(self, pose, occupancy_patch, belief_patch, goal_id):
         """
@@ -74,11 +85,16 @@ class ObjectSearchAgent(nn.Module):
         x_flat = torch.cat([pose, goal_id], dim=1)  # → (batch, 6 + 28)
         x_flat = self.mlp_flat(x_flat)
 
-        # Combine and produce Q-values
         x = torch.cat([x_spatial, x_flat], dim=1)
-        q_values = self.fc(x)
+        x = self.shared_fc(x)
 
-        return q_values  # shape: (batch, 3)
+        value = self.value_stream(x)               # (batch, 1)
+        advantage = self.advantage_stream(x)       # (batch, num_actions)
+
+        # Combine value and advantage into Q-values
+        q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
+        return q_values
+
 
     def _normalize_inputs(self, pose, occupancy_patch, belief_patch, goal):
         """ Check if batch and sequence dimensions are missing and add them """
@@ -149,30 +165,38 @@ def select_action(policy_net, state, epsilon, num_actions):
 def update_target_network(policy_net, target_net):
     target_net.load_state_dict(policy_net.state_dict())
 
-def compute_reward(previous_pose, current_pose, previous_poses_buffer, found_target, 
-                   entropy_before=0.0, entropy_after=0.0):
+def compute_reward(action, previous_pose, new_pose, previous_poses_buffer, previous_cells_buffer, previous_belief_patch, next_belief_patch, target_class_id, found_target):
 
+    # Initialize reward
     reward = 0.0
 
     # Success
     if found_target:
-        return 10.0
+        return 10.0 
 
-    # Invalid move (into wall)
-    if torch.equal(current_pose, previous_pose):
-        reward -= 2.0
-
-    # Repeated position
-    elif any(torch.equal(current_pose, p) for p in previous_poses_buffer):
+    # New pose processing
+    if torch.equal(new_pose, previous_pose): # Invalid move (into wall)
+        reward -= 1.0
+    elif any(torch.equal(new_pose, p) for p in previous_poses_buffer):     # Repeated position
         reward -= 0.5
-
-    else:
-        # Small bonus for exploring new cell
+    elif new_pose[4:].tolist() in previous_cells_buffer:  # Repeated cell
+        reward -= 0.25
+    else: # Small bonus for exploring new pose
         reward += 0.5
 
-    # Entropy shaping
-    # delta_entropy = entropy_before - entropy_after
-    # reward += 0.5 * delta_entropy
+    # Encourage moving forward
+    if action == "move_forward":  
+        reward += 0.1
+
+    # Encourage high entropy in belief patch
+    #previous_belief_entropy = compute_belief_patch_entropy(previous_belief_patch)
+    #next_belief_entropy = compute_belief_patch_entropy(next_belief_patch)
+    #reward += 100 * (previous_belief_entropy-next_belief_entropy)
+
+    # Encourage high probability of target object in belief patch
+    target_prob = compute_belief_patch_target_prob(next_belief_patch, target_class_id)
+    previous_target_prob = compute_belief_patch_target_prob(previous_belief_patch, target_class_id)
+    reward += 1000 * (target_prob - previous_target_prob)
 
     # Step cost
     reward -= 0.01
@@ -180,3 +204,59 @@ def compute_reward(previous_pose, current_pose, previous_poses_buffer, found_tar
     return reward
 
 
+# Helper functions for belief patch processing
+def compute_belief_patch_entropy(belief_patch):
+    """
+    Computes the average entropy over valid spatial locations in the belief patch,
+    where a location is considered valid if its class distribution is not all zero.
+
+    Args:
+        belief_patch (torch.Tensor): Tensor of shape (num_classes, height, width),
+                                     representing class probabilities at each pixel.
+
+    Returns:
+        float: Mean entropy of the belief patch.
+    """
+    eps = 1e-10
+
+    # Compute sum over classes to identify valid pixels (non-zero distributions)
+    valid_mask = belief_patch.sum(dim=0) > 0  # Shape: (height, width)
+
+    # Count valid pixels
+    num_valid_pixels = valid_mask.sum().item()
+
+    if num_valid_pixels == 0:
+        return 0.0 # No valid pixels
+
+    # Clamp to avoid log(0)
+    belief_patch = belief_patch.clamp(min=eps)
+
+    # Compute entropy at each pixel
+    entropy_map = -torch.sum(belief_patch * torch.log(belief_patch), dim=0)  # Shape: (height, width)
+
+    # Filter entropy to valid pixels
+    valid_entropy = entropy_map[valid_mask]
+
+    # Compute mean entropy
+    mean_entropy = valid_entropy.mean().item()
+
+    return mean_entropy
+
+def compute_belief_patch_target_prob(belief_patch, target_class_id):
+    """
+    Computes the maximum probability of the target class in the belief patch.
+
+    Args:
+        belief_patch (torch.Tensor): Tensor of shape (num_classes, height, width),
+                                     representing class probabilities at each pixel.
+        target_class_id (int): The class ID for which to compute the probability.
+
+    Returns:
+        float: Maximum probability of the target class in the belief patch.
+    """
+    if not (0 <= target_class_id < belief_patch.shape[0]):
+        raise ValueError(f"Invalid class ID {target_class_id}. Must be in range [0, {belief_patch.shape[0] - 1}]")
+
+    target_prob = belief_patch[target_class_id].max().item()
+
+    return target_prob
