@@ -1,192 +1,266 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from collections import deque
 import random
+import numpy as np
+import math
+from dataclasses import dataclass
+from typing import Tuple, Optional
 
-class ObjectSearchAgent(nn.Module):
-    def __init__(self, num_classes=27, num_actions=3, patch_size=9, goal_embedding_dim=32):
-        super(ObjectSearchAgent, self).__init__()
+# =========================
+# Observation builder (optional helper)
+# =========================
 
-        # Init parameters
-        self.num_classes = num_classes
-        self.num_actions = num_actions
-        self.patch_size = patch_size
-        self.goal_embedding_dim = goal_embedding_dim
+def dirichlet_mean(alpha: np.ndarray) -> np.ndarray:
+    # alpha: (H, W, K)
+    s = np.sum(alpha, axis=-1, keepdims=True) + 1e-8
+    return alpha / s
 
-        self.goal_embedding = nn.Embedding(num_classes, goal_embedding_dim)
+def categorical_entropy(p: np.ndarray) -> np.ndarray:
+    # p: (..., K)
+    ps = np.clip(p, 1e-12, 1.0)
+    return -np.sum(ps * np.log(ps), axis=-1)
 
-        self.pose_fc = nn.Sequential(
-            nn.Linear(3, 64),
+def build_fullmap_obs(
+    alpha: np.ndarray,         # (H,W,K) Dirichlet parameters (can be priors in free space)
+    target_idx: int,
+    occupancy: np.ndarray,     # (H,W)  0 = free, 1 = occupied
+    agent_rc: Tuple[int, int], # (r,c)
+    theta: float,              # radians
+    k_classes: int
+) -> np.ndarray:
+    """
+    Returns (C,H,W) float32 with C=6:
+      0: p_target on occupied cells (0 on free)
+      1: entropy (normalized) on occupied cells (0 on free)
+      2: free_mask (0 on free, 1 on occupied)
+      3: agent_pos (one-hot)
+      4: cos(theta) map
+      5: sin(theta) map
+    """
+    H, W, K = alpha.shape
+
+    # Dirichlet mean and entropy per cell over classes
+    p_all = dirichlet_mean(alpha)                      # (H,W,K)
+    p_target = p_all[..., target_idx]                  # (H,W)
+
+    # normalized categorical entropy over K classes
+    H_cat = categorical_entropy(p_all) / (math.log(k_classes + 1e-12))   # (H,W)
+
+    # Masks
+    occ = occupancy.astype(np.float32)                 # 1 on occupied, 0 on free
+
+    # Zero-out prob/entropy on free space
+    p_target_occ = p_target.astype(np.float32) * occ
+    entropy_occ  = H_cat.astype(np.float32) * occ
+
+    # Agent position map
+    agent_pos = np.zeros((H, W), dtype=np.float32)
+    r, c = agent_rc
+    # Safety: clamp in case of rounding
+    r = max(0, min(H-1, int(r))); c = max(0, min(W-1, int(c)))
+    agent_pos[r, c] = 1.0
+
+    # Orientation maps
+    cos_map = np.full((H, W), np.cos(theta), dtype=np.float32)
+    sin_map = np.full((H, W), np.sin(theta), dtype=np.float32)
+
+    obs = np.stack(
+        [p_target_occ, entropy_occ, occ, agent_pos, cos_map, sin_map],
+        axis=0
+    )
+
+    # # Print every channel sequentially
+  
+    # # Target prob
+    # print("Channel 0 (Target prob): ")
+    # for i in range(obs[0].shape[0]):
+    #     print(f"\n")
+    #     for j in range(obs[0].shape[1]):
+    #         print(f"{obs[0][i][j]:.2f} ", end="")
+
+    # # Entropy
+    # print("\nChannel 1 (Entropy): ")
+    # for i in range(obs[1].shape[0]):
+    #     print(f"\n")
+    #     for j in range(obs[1].shape[1]):
+    #         print(f"{obs[1][i][j]:.2f} ", end="")
+
+    # # Occupancy
+    # print("\nChannel 2 (Occupancy): ")
+    # for i in range(obs[2].shape[0]):
+    #     print(f"\n")
+    #     for j in range(obs[2].shape[1]):
+    #         print(f"{obs[2][i][j]} ", end="")
+
+    # # Agent pos
+    # print("\nChannel 3 (Agent pos): ")
+    # for i in range(obs[3].shape[0]):
+    #     print(f"\n")
+    #     for j in range(obs[3].shape[1]):
+    #         print(f"{obs[3][i][j]} ", end="")
+
+    # # Cosine
+    # print("\nChannel 4 (Cosine): ")
+    # for i in range(obs[4].shape[0]):
+    #     print(f"\n")
+    #     for j in range(obs[4].shape[1]):
+    #         print(f"{obs[4][i][j]:.2f} ", end="")
+
+    # # Sine
+    # print("\nChannel 5 (Sine): ")
+    # for i in range(obs[5].shape[0]):
+    #     print(f"\n")
+    #     for j in range(obs[5].shape[1]):
+    #         print(f"{obs[5][i][j]:.2f} ", end="")
+    # print("\n")
+    
+    # Safety
+    obs = np.nan_to_num(obs, nan=0.0, posinf=1.0, neginf=-1.0)
+    return obs.astype(np.float32)
+
+
+# =========================
+# DQN Network, Replay Buffer, Training
+# =========================
+class ObjectSearchQNetwork(nn.Module):
+    """
+    Input:  obs (B, C, 19, 32)  where C = 6 (p_target_occ, entropy_occ, occupancy, agent_pos, cosθ, sinθ)
+    Output: Q-values (B, num_actions)
+    """
+    def __init__(self, in_channels: int = 6, num_actions: int = 3, feature_dim: int = 256):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channels, 32, kernel_size=5, stride=2, padding=2), nn.ReLU(),   # -> (32, 10, 16)
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),          nn.ReLU(),   # -> (64, 5, 8)
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),          nn.ReLU(),   # -> (64, 5, 8)
+        )
+        self.fc = nn.Sequential(
+            nn.Linear(64*5*8, feature_dim),  # 64*5*8 = 2560
             nn.ReLU(),
-            nn.Linear(64, 128),
-            nn.ReLU()
+            nn.Linear(feature_dim, num_actions)
         )
 
-        self.occupancy_cnn = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Flatten()
-        )
+        # Orthogonal init (stable)
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.orthogonal_(m.weight, nn.init.calculate_gain('relu'))
+                if m.bias is not None: nn.init.zeros_(m.bias)
+            if isinstance(m, nn.Linear):
+                gain = nn.init.calculate_gain('relu') if m is not self.fc[-1] else 1.0
+                nn.init.orthogonal_(m.weight, gain=gain)
+                nn.init.zeros_(m.bias)
 
-        self.belief_cnn = nn.Sequential(
-            nn.Conv2d(num_classes, 32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Flatten()
-        )
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+        # obs: (B,C,19,32)
+        x = self.encoder(obs)
+        x = x.view(x.size(0), -1)
+        q = self.fc(x)
+        return q
 
-        # Sample tensors to determine output dimensions
-        sample_tensor = torch.zeros(1, 1, patch_size, patch_size)
-        occ_out_dim = self.occupancy_cnn(sample_tensor).shape[1]
-        belief_sample_tensor = torch.zeros(1, num_classes, patch_size, patch_size)
-        belief_out_dim = self.belief_cnn(belief_sample_tensor).shape[1]
 
-        # Calculate combined size for LSTM input
-        combined_size = 128 + occ_out_dim + belief_out_dim + goal_embedding_dim
+class ReplayBuffer:
+    def __init__(self, capacity: int, device: torch.device):
+        self.buffer = deque(maxlen=capacity)
+        self.device = device
 
-        self.lstm = nn.LSTM(combined_size, 512, batch_first=True, num_layers=2)
+    def push(self, obs, action, reward, next_obs, done):
+        # store CPU tensors or numpy; we’ll convert on sample
+        self.buffer.append((obs, action, reward, next_obs, done))
 
-        self.fc_value = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, 1)
-        )
+    def sample(self, batch_size: int):
+        batch = random.sample(self.buffer, batch_size)
+        obs, actions, rewards, next_obs, dones = zip(*batch)
 
-        self.fc_advantage = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, num_actions)
-        )
-
-    def forward(self, pose, occupancy_patch, belief_patch, goal, hidden_state=None):
-
-        pose, occupancy_patch, belief_patch, goal = self._normalize_inputs(pose, occupancy_patch, belief_patch, goal)
-
-        # Get batch and sequence dimensions
-        batch_size, seq_len = pose.shape[:2]
-
-        # Reshape for feature encoders
-        pose_flat = pose.reshape(batch_size * seq_len, -1)
-        occ_flat = occupancy_patch.reshape(batch_size * seq_len, *occupancy_patch.shape[2:])
-        belief_flat = belief_patch.reshape(batch_size * seq_len, *belief_patch.shape[2:])
-        goal_flat = goal.reshape(batch_size * seq_len)
-
-        # Encode features
-        pose_encoded = self.pose_fc(pose_flat)
-        occ_encoded = self.occupancy_cnn(occ_flat)
-        belief_encoded = self.belief_cnn(belief_flat)
-        goal_encoded = self.goal_embedding(goal_flat)
-
-        # Reshape encoded features to match LSTM input
-        fused = torch.cat([pose_encoded, occ_encoded, belief_encoded, goal_encoded], dim=1)
-        fused = fused.view(batch_size, seq_len, -1)
-
-        lstm_out, hidden_state = self.lstm(fused, hidden_state)
-
-        last_output = lstm_out  # Use all timesteps
-
-        value = self.fc_value(last_output)
-        advantage = self.fc_advantage(last_output)
-        q_values = value + advantage - advantage.mean(dim=1, keepdim=True)
-
-        return q_values, hidden_state
-
-    def _normalize_inputs(self, pose, occupancy_patch, belief_patch, goal):
-        """ Check if batch and sequence dimensions are missing and add them """
-
-        # One step input
-        if pose.dim() == 1:
-            pose = pose.unsqueeze(0).unsqueeze(0)
-            occupancy_patch = occupancy_patch.unsqueeze(0).unsqueeze(0)
-            belief_patch = belief_patch.unsqueeze(0).unsqueeze(0)
-            goal = goal.unsqueeze(0).unsqueeze(0)
-
-        # Batch input
-        elif pose.dim() == 2:
-            pose = pose.unsqueeze(0)
-            occupancy_patch = occupancy_patch.unsqueeze(0)
-            belief_patch = belief_patch.unsqueeze(0)
-            goal = goal.unsqueeze(0)
-
-        return pose, occupancy_patch, belief_patch, goal
-
-class SequenceReplayBuffer:
-    def __init__(self, capacity=1000, sequence_length=10):
-        self.capacity = capacity
-        self.sequence_length = sequence_length
-        self.buffer = []
-
-    def push_episode(self, episode):
-        if len(self.buffer) >= self.capacity:
-            self.buffer.pop(0)
-        self.buffer.append(episode)
-
-    def sample(self, batch_size, device="cuda:0"):
-        episodes = random.sample(self.buffer, batch_size)
-        batch = []
-        for ep in episodes:
-            if len(ep) >= self.sequence_length:
-                start_idx = random.randint(0, len(ep) - self.sequence_length)
-                batch.append(ep[start_idx:start_idx + self.sequence_length])
-            else:
-                # Pad shorter sequences if needed (optional)
-                batch.append(ep + [ep[-1]] * (self.sequence_length - len(ep)))
-
-        # Now, batch is a list of length batch_size, each element is a list of sequence_length tuples
-
-        # Unzip all elements
-        poses, occ_patches, belief_patches, target_object_ids, actions, rewards, next_poses, next_occ_patches, next_belief_patches, next_target_object_ids, dones = zip(
-            *[step for episode in batch for step in episode]
-        )
-
-        # Reshape to [batch_size, sequence_length, ...]
-        def stack_and_reshape(tensors, shape):
-            stacked = torch.stack(tensors).to(device)
-            return stacked.view(batch_size, self.sequence_length, *shape)
-
-        poses = stack_and_reshape(poses, poses[0].shape)
-        occ_patches = stack_and_reshape(occ_patches, occ_patches[0].shape)
-        belief_patches = stack_and_reshape(belief_patches, belief_patches[0].shape)
-        target_object_ids = stack_and_reshape(target_object_ids, target_object_ids[0].shape)
-        actions = torch.tensor(actions, device=device).view(batch_size, self.sequence_length)
-        rewards = torch.tensor(rewards, device=device).view(batch_size, self.sequence_length)
-        next_poses = stack_and_reshape(next_poses, next_poses[0].shape)
-        next_occ_patches = stack_and_reshape(next_occ_patches, next_occ_patches[0].shape)
-        next_belief_patches = stack_and_reshape(next_belief_patches, next_belief_patches[0].shape)
-        next_target_object_ids = stack_and_reshape(next_target_object_ids, next_target_object_ids[0].shape)
-        dones = torch.tensor(dones, dtype=torch.bool, device=device).view(batch_size, self.sequence_length)
-
-        return (poses, occ_patches, belief_patches, target_object_ids,
-                actions, rewards, next_poses, next_occ_patches,
-                next_belief_patches, next_target_object_ids, dones)
-
+        # Convert to tensors (B,C,H,W)
+        actions   = torch.as_tensor(actions, dtype=torch.long, device=self.device)
+        rewards   = torch.as_tensor(rewards, dtype=torch.float32, device=self.device)
+        dones     = torch.as_tensor(dones, dtype=torch.float32, device=self.device)
+        next_obs  = torch.as_tensor(np.stack(next_obs, axis=0), dtype=torch.float32, device=self.device)
+        obs       = torch.as_tensor(np.stack(obs, axis=0), dtype=torch.float32, device=self.device)
+        return obs, actions, rewards, next_obs, dones
 
     def __len__(self):
         return len(self.buffer)
-    
-def select_action(policy_net, pose, occupancy_patch, belief_patch, goal, num_actions, hidden_state, epsilon=0.1):
+
+
+def select_action(q_net: ObjectSearchQNetwork, obs_np: np.ndarray, epsilon: float, num_actions: int) -> int:
     """
-    Select an action using epsilon-greedy policy.
-    Args:
-        policy_net: The DQN network.
-        pose: The current pose of the agent (tensor).
-        occupancy_patch: The occupancy patch (tensor).
-        belief_patch: The belief patch (tensor).
-        goal: The target object ID (tensor).
-        num_actions: Number of possible actions.
-        hidden_state: Hidden state for LSTM (optional).
-        epsilon: Epsilon value for exploration.
-    Returns:
-        action: Selected action index.
-        hidden_state: Updated hidden state.
+    obs_np: (C,19,32) numpy float32
     """
     if random.random() < epsilon:
-        action = random.randint(0, num_actions - 1)
-        return action, hidden_state
-    else:
-        with torch.no_grad():
-            q_values, hidden_state = policy_net(pose, occupancy_patch, belief_patch, goal, hidden_state)
-            action = q_values.argmax().item()
-        return action, hidden_state
+        return random.randint(0, num_actions - 1)
+    with torch.no_grad():
+        obs_t = torch.from_numpy(obs_np).unsqueeze(0).to(next(q_net.parameters()).device)  # (1,C,H,W)
+        q = q_net(obs_t)  # (1,A)
+        return int(q.argmax(dim=1).item())
+
+
+def dqn_update(q_net: ObjectSearchQNetwork,
+               target_net: ObjectSearchQNetwork,
+               optimizer: torch.optim.Optimizer,
+               replay: ReplayBuffer,
+               batch_size: int,
+               gamma: float):
+    """
+    Double DQN:
+      a* = argmax_a Q_online(s', a)
+      target = r + (1-done) * gamma * Q_target(s', a*)
+    """
+    if len(replay) < batch_size:
+        return None
+
+    obs, actions, rewards, next_obs, dones = replay.sample(batch_size)
+    # Q(s,a)
+    q = q_net(obs)                                  # (B,A)
+    q_sa = q.gather(1, actions.view(-1,1)).squeeze(1)
+
+    with torch.no_grad():
+        # Online net chooses action at s'
+        q_next_online = q_net(next_obs)             # (B,A)
+        next_actions = q_next_online.argmax(dim=1)  # (B,)
+        # Target net evaluates s', a*
+        q_next_target = target_net(next_obs)        # (B,A)
+        q_next = q_next_target.gather(1, next_actions.view(-1,1)).squeeze(1)
+        target = rewards + (1.0 - dones) * gamma * q_next
+
+    loss = F.smooth_l1_loss(q_sa, target)
+
+    optimizer.zero_grad()
+    loss.backward()
+    nn.utils.clip_grad_norm_(q_net.parameters(), max_norm=1.0)
+    optimizer.step()
+    return float(loss.item())
+
+def hard_update_target(q_net: ObjectSearchQNetwork, target_net: ObjectSearchQNetwork):
+    target_net.load_state_dict(q_net.state_dict())
+
+
+# =========================
+# Reward shaping function
+# =========================
+
+def compute_reward(
+    target_found: bool,
+    success_bonus: float = 10.0,
+    step_penalty: float = -0.01
+) -> float:
+    """
+    Compute PPO reward with simple shaping:
+      - success bonus
+      - step penalty
+      - collision penalty
+      - global entropy reduction
+    """
+    reward = 0.0
+
+    # Success condition
+    if target_found:
+        reward += success_bonus
+        return reward
+
+    # Always penalize time
+    reward += step_penalty
+
+    return reward
