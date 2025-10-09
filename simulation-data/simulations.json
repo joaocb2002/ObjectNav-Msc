@@ -320,5 +320,47 @@
         "target_object": "vase",
         "target_object_id": 75,
         "target_object_location": [-7.731032811105251,0.8223980307928287,5.058559417724609]
+    },
+    {
+        "index": 46,
+        "scene": "FloorPlan_Train10_1",
+        "target_object": "bowl",
+        "target_object_id": 45,
+        "target_object_location": [-6.690544605255127,0.4732483923435211,-2.477999210357666]
+    },
+    {
+        "index": 47,
+        "scene": "FloorPlan_Train10_1",
+        "target_object": "potted plant",
+        "target_object_id": 58,
+        "target_object_location": [-9.496996879577637,0.4710410237312317,-1.8669928312301636]
+    },
+    {
+        "index": 48,
+        "scene": "FloorPlan_Train10_1",
+        "target_object": "laptop",
+        "target_object_id": 63,
+        "target_object_location": [-1.6689578294754028,0.31906551122665405,-1.4880502223968506]
+    },
+    {
+        "index": 49,
+        "scene": "ProcTHOR-Train-2040",
+        "target_object": "tv",
+        "target_object_id": 62,
+        "target_object_location": [-3.4004393303682123, 0.8866309966155591, 8.77629752010107]
+    },
+    {
+        "index": 50,
+        "scene": "ProcTHOR-Train-2040",
+        "target_object": "potted plant",
+        "target_object_id": 58,
+        "target_object_location": [-5.7665385755066625,-0.021980981808155775,10.18671019444126]
+    },
+    {
+        "index": 51,
+        "scene": "ProcTHOR-Train-2040",
+        "target_object": "toilet",
+        "target_object_id": 61,
+        "target_object_location": [-0.2895846902946436,0.001768748760223371,9.571680106408461]
     }
 ]
