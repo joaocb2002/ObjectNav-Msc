@@ -362,5 +362,33 @@
         "target_object": "toilet",
         "target_object_id": 61,
         "target_object_location": [-0.2895846902946436,0.001768748760223371,9.571680106408461]
+    },
+    {
+        "index": 52,
+        "scene": "FloorPlan_Train3_1",
+        "target_object": "teddy bear",
+        "target_object_id": 77,
+        "target_object_location": [-9.09979248046875,0.3305816948413849,-2.410083532333374]
+    },
+    {
+        "index": 53,
+        "scene": "FloorPlan_Train3_1",
+        "target_object": "potted plant",
+        "target_object_id": 58,
+        "target_object_location": [-4.789992809295654,0.5929855108261108,-1.260035514831543]
+    },
+    {
+        "index": 54,
+        "scene": "FloorPlan_Train3_1",
+        "target_object": "laptop",
+        "target_object_id": 63,
+        "target_object_location": [-1.3711198568344116,0.814714252948761,-3.8145105838775635]
+    },
+    {
+        "index": 55,
+        "scene": "FloorPlan_Train3_1",
+        "target_object": "tv",
+        "target_object_id": 62,
+        "target_object_location": [-9.496637344360352,1.4597948789596558,-4.243052005767822]
     }
 ]

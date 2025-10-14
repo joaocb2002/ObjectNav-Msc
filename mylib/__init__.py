@@ -6,5 +6,3 @@ from . import probtools
 from . import dqn
 from . import dqn_v2
 from . import dqn_v3
-from . import ppo
-from . import rewards_ppo

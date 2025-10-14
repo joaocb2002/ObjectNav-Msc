@@ -121,43 +121,60 @@ def build_fullmap_obs(
     return obs.astype(np.float32)
 
 
-# =========================
+# ========================= #
 # DQN Network, Replay Buffer, Training
-# =========================
+# ========================= #
+
 class ObjectSearchQNetwork(nn.Module):
     """
-    Input:  obs (B, C, 42, 36)
+    DQN for object search.
+    Input:
+        obs: Tensor of shape (B, C, 19, 32)
             where C = 6 (p_target_occ, entropy_occ, occupancy, agent_pos, cosθ, sinθ)
-    Output: Q-values (B, num_actions)
+    Output:
+        Q-values of shape (B, num_actions)
     """
     def __init__(self, in_channels: int = 6, num_actions: int = 3, feature_dim: int = 256):
         super().__init__()
+
+        # Convolutional encoder
         self.encoder = nn.Sequential(
-            nn.Conv2d(in_channels, 32, kernel_size=5, stride=2, padding=2), nn.ReLU(),   # (6,42,36) -> (32,21,18)
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),          nn.ReLU(),   # -> (64,11,9)
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),          nn.ReLU(),   # -> (64,11,9)
+            nn.Conv2d(in_channels, 32, kernel_size=5, stride=2, padding=2),
+            nn.ReLU(),  # -> (32, 10, 16)
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),  # -> (64, 5, 8)
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU()   # -> (64, 5, 8)
         )
+
+        # Fully-connected layers
         self.fc = nn.Sequential(
-            nn.Linear(64*11*9, feature_dim),  # 64*11*9 = 6336
+            nn.Linear(64 * 5 * 8, feature_dim),  # 64*5*8 = 2560
             nn.ReLU(),
             nn.Linear(feature_dim, num_actions)
         )
 
-        # Orthogonal init (stable)
+        # Orthogonal initialization (stable)
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.orthogonal_(m.weight, nn.init.calculate_gain('relu'))
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
-            if isinstance(m, nn.Linear):
+            elif isinstance(m, nn.Linear):
                 gain = nn.init.calculate_gain('relu') if m is not self.fc[-1] else 1.0
                 nn.init.orthogonal_(m.weight, gain=gain)
                 nn.init.zeros_(m.bias)
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
-        # obs: (B, C, 42, 36)
+        """
+        Forward pass.
+        Args:
+            obs (torch.Tensor): (B, C, 19, 32)
+        Returns:
+            torch.Tensor: Q-values (B, num_actions)
+        """
         x = self.encoder(obs)
-        x = x.view(x.size(0), -1)  # -> (B, 6336)
+        x = x.view(x.size(0), -1)
         q = self.fc(x)
         return q
 
@@ -267,3 +284,99 @@ def compute_reward(
     reward += step_penalty
 
     return reward
+
+def compute_reward_two(
+    target_found: bool,
+    prev_entropy: float,
+    curr_entropy: float,
+    prev_target_prob: float,
+    curr_target_prob: float,
+    collided: bool=False,
+    success_bonus: float = 10.0,
+    prob_coeff: float = 5.0,
+    entropy_coeff: float = 2.0,
+    step_penalty: float = -0.01,
+    collision_penalty: float = -0.1,
+    turning_penalty: float = -0.01,
+    eps: float = 1e-4,
+    info_cap: float = 0.5,
+):
+    """
+    Reward = success + step + entropy drop (occupied cells only)
+             + increase in peak target prob (occupied cells only) - collision.
+    Use POSTERIOR values for curr_* (after updating with the new observation).
+    """
+    if target_found:
+        return success_bonus
+
+    reward = step_penalty
+
+    dH = max(0.0, (prev_entropy - curr_entropy) - eps)       # reward entropy ↓
+    dP = max(0.0, (curr_target_prob - prev_target_prob) - eps)  # reward prob ↑
+
+    reward += entropy_coeff * min(dH, info_cap)
+    reward += prob_coeff * min(dP, info_cap)
+
+    # if collided:
+    #     reward += collision_penalty
+
+    return reward
+
+
+
+# =========================
+# Reward Utility functions
+
+def compute_entropy_patch(belief_map, grid_map, agent_pos, patch_size=15):
+    """
+    belief_map: (H,W,K) dirichlet parameters
+    grid_map: (H,W) 1 for occupied cells
+    agent_pos: (r,c)
+    patch_size: int, size of the square patch (should be odd)
+    """
+    belief_map = np.array(belief_map)
+    H, W, K = belief_map.shape
+    r, c = agent_pos
+    half_size = patch_size // 2
+
+    # Define patch boundaries
+    r1 = max(0, r - half_size)
+    r2 = min(H, r + half_size + 1)
+    c1 = max(0, c - half_size)
+    c2 = min(W, c + half_size + 1)
+
+    # Extract patch
+    patch_alpha = belief_map[r1:r2, c1:c2, :]          # (h,w,K)
+    patch_occ = grid_map[r1:r2, c1:c2]                  # (h,w)
+
+    # Dirichlet mean and entropy per cell over classes
+    p_all = dirichlet_mean(patch_alpha)                 # (h,w,K)
+    H_cat = categorical_entropy(p_all) / (math.log(K + 1e-12))  # (h,w)
+
+    # Select only occupied cells
+    sel = H_cat[patch_occ.astype(bool)]                  # (num_occupied,)
+    if sel.size == 0:
+        return 0.0
+    return float(np.mean(sel))
+
+
+def compute_max_target_prob(belief_map, grid_map, target_idx):
+    """
+    belief_map: (H,W,K) dirichlet parameters
+    grid_map: (H,W) 1 for occupied cells
+    target_idx: int, index of the target class
+    """
+
+    # belief map is a list of lists of lists; convert to np array
+    belief_map = np.array(belief_map)
+    H, W, K = belief_map.shape
+
+    # Dirichlet mean
+    p_all = dirichlet_mean(belief_map)                  # (H,W,K)
+    p_target = p_all[..., target_idx]                    # (H,W)
+
+    # Select only occupied cells
+    sel = p_target[grid_map.astype(bool)]                # (num_occupied,)
+    if sel.size == 0:
+        return 0.0
+    return float(np.max(sel))
