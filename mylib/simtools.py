@@ -956,18 +956,23 @@ def perform_action(action, agent_pos, agent_rot):
 # -----------------------------
 # Clustering Functions
 # -----------------------------
-def cluster_mapping(grid_map, cluster_num):
+def cluster_mapping(grid_map, cluster_num, random_state=42):
     """
-    Cluster the occupancy grid map into a specified number of clusters using KMeans.
+    Cluster the occupancy grid map into a specified number of clusters using deterministic KMeans.
 
     Args:
         grid_map (np.ndarray): An (N, 2) array where each row is a free cell coordinate (x, y).
         cluster_num (int): The number of clusters to form.
+        random_state (int): Seed for random number generator to ensure determinism.
 
     Returns:
         dict: Mapping from (x, y) tuple to cluster index.
     """
-    kmeans = KMeans(n_clusters=cluster_num, n_init=1) # Dynamic random seed, only one initialization: stochasticity
+    kmeans = KMeans(
+        n_clusters=cluster_num,
+        n_init=1,                # only one initialization
+        random_state=random_state  # fixed seed
+    )
     labels = kmeans.fit_predict(grid_map)
     
     # Create mapping from coordinate tuple to cluster label
@@ -975,7 +980,7 @@ def cluster_mapping(grid_map, cluster_num):
     
     return cluster_map
 
-def get_cluster_centers(cluster_map, cluster_num, top_n=4, seed=None):
+def get_cluster_centers(cluster_map, cluster_num, top_n=1, seed=None):
     """
     Get a representative coordinate for each cluster, randomly selected from the top-N closest to the cluster mean.
 
