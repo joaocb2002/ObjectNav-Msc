@@ -62,5 +62,53 @@
         "success_avg_num_actions": 23.14,
         "success_avg_travelled_distance": 4.801320965744946,
         "success_avg_location_error": 0.12210626173321183
+    },
+    {
+        "simulation_index": 56,
+        "scene": "ProcTHOR-Train-13",
+        "target_object": "laptop",
+        "search_method": "RANDOM",
+        "confidence_threshold": 0.8,
+        "max_iter_coefficient": 0.75,
+        "location_error_threshold": 0.5,
+        "pseudo_count_threshold": 6.0,
+        "num_total_epochs": 100,
+        "num_success_epochs": 45,
+        "success_rate": 45.0,
+        "success_avg_num_actions": 237.04444444444445,
+        "success_avg_travelled_distance": 20.40299787367201,
+        "success_avg_location_error": 0.21766320308424988
+    },
+    {
+        "simulation_index": 56,
+        "scene": "ProcTHOR-Train-13",
+        "target_object": "laptop",
+        "search_method": "BASELINE",
+        "confidence_threshold": 0.8,
+        "max_iter_coefficient": 0.75,
+        "location_error_threshold": 0.5,
+        "pseudo_count_threshold": 6.0,
+        "num_total_epochs": 100,
+        "num_success_epochs": 89,
+        "success_rate": 89.0,
+        "success_avg_num_actions": 219.84,
+        "success_avg_travelled_distance": 47.00374428324708,
+        "success_avg_location_error": 0.20835653415675595
+    },
+    {
+        "simulation_index": 56,
+        "scene": "ProcTHOR-Train-13",
+        "target_object": "laptop",
+        "search_method": "DIRICHLET",
+        "confidence_threshold": 0.8,
+        "max_iter_coefficient": 0.75,
+        "location_error_threshold": 0.5,
+        "pseudo_count_threshold": 6.0,
+        "num_total_epochs": 100,
+        "num_success_epochs": 94,
+        "success_rate": 94.0,
+        "success_avg_num_actions": 124.03191489361703,
+        "success_avg_travelled_distance": 27.664697206203577,
+        "success_avg_location_error": 0.22029868040360467
     }
 ]
