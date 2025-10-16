@@ -390,5 +390,12 @@
         "target_object": "tv",
         "target_object_id": 62,
         "target_object_location": [-9.496637344360352,1.4597948789596558,-4.243052005767822]
+    },
+    {
+        "index": 56,
+        "scene": "ProcTHOR-Train-13",
+        "target_object": "laptop",
+        "target_object_id": 63,
+        "target_object_location": [-8.015352711081482,0.7035654854707614,7.512202725270831]
     }
 ]
