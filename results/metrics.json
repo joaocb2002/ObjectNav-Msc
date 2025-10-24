@@ -110,5 +110,21 @@
         "success_avg_num_actions": 124.03191489361703,
         "success_avg_travelled_distance": 27.664697206203577,
         "success_avg_location_error": 0.22029868040360467
+    },
+    {
+        "simulation_index": 56,
+        "scene": "ProcTHOR-Train-13",
+        "target_object": "laptop",
+        "search_method": "HYBRID",
+        "confidence_threshold": 0.8,
+        "max_iter_coefficient": 0.75,
+        "location_error_threshold": 0.5,
+        "pseudo_count_threshold": 6.0,
+        "num_total_epochs": 100,
+        "num_success_epochs": 100,
+        "success_rate": 100.0,
+        "success_avg_num_actions": 108.15,
+        "success_avg_travelled_distance": 25.545555493809324,
+        "success_avg_location_error": 0.21231427445483333
     }
 ]
