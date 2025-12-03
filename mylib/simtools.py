@@ -445,7 +445,85 @@ def display_topdown_and_entropy_maps_only(topdown_map, occ_grid_map, entropy_map
     plt.tight_layout()
     plt.show()
 
+#------------------------------
+# Display target prob heat map
+# -----------------------------
+def display_gridmap_with_clusters_and_target_prob_heatmap(grid_map, target_prob_heat_map, agent_positions, agent_radius, agent_yaw, cluster_map, cluster_centers):
+    """
+    Displays the top-down map and occupancy grid map with the agent's position and orientation.
 
+    Args:
+        target_prob_heat_map (np.ndarray): 2D array representing the target probability in each cell.
+        grid_map (np.ndarray): Rendered occupancy grid map image.
+        agent_positions (tuple): Tuple containing the agent's position in the top-down map and occupancy grid.
+        agent_radius (tuple): Tuple containing the agent's radius in the top-down map and occupancy grid.
+        agent_yaw (float): Agent's yaw angle in degrees.
+        cluster_map (dict): Mapping from (x, y) tuple to cluster index.
+        cluster_centers (list): List of cluster centers.
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6, 3))
+
+    # Compute the agent position and radius in the top-down map and occupancy grid
+    _, (grid_x, grid_y) =  agent_positions
+    _, occ_grid_radius = agent_radius
+
+    # Top-down map
+    ax1.imshow(grid_map)
+    ax1.set_title('topdown map')
+    ax1.axis('off')
+
+    # Occupancy grid with clusters
+    ax2.imshow(grid_map)
+    ax2.set_title('occupancy grid')
+    ax2.axis('off')
+
+    # Black grid lines
+    rows, cols = grid_map.shape[:2]
+    for i in range(rows):
+        ax2.axhline(y=i-0.5, color='black', linewidth=0.5)
+        ax1.axhline(y=i-0.5, color='black', linewidth=0.5)
+    for j in range(cols):
+        ax2.axvline(x=j-0.5, color='black', linewidth=0.5)
+        ax1.axvline(x=j-0.5, color='black', linewidth=0.5)
+
+    # Plot each cluster with a different color in occupancy grid
+    for i in range(len(cluster_centers)):
+        cluster_coords = [coord for coord, label in cluster_map.items() if label == i]
+        if cluster_coords:
+            x_coords, y_coords = zip(*cluster_coords)
+            ax2.scatter(y_coords, x_coords, label=f'Cluster {i}', alpha=0.2)
+
+    # Plot cluster centers
+    for i, center in enumerate(cluster_centers):
+        ax2.scatter(center[1], center[0], marker='x', color='black', s=100, label=f'Center {i}', alpha=0.5)
+
+    # Draw the agent position and orientation on the top-down map and occupancy grid
+    agent_yaw = math.radians(agent_yaw)
+    ax2.add_patch(plt.Circle((grid_y, grid_x), occ_grid_radius*2/3, color="red", fill=True))
+    ax2.add_patch(plt.Arrow(grid_y, grid_x, -occ_grid_radius * np.sin(agent_yaw), -occ_grid_radius * np.cos(agent_yaw), width=occ_grid_radius / 2, color="black"))
+
+    # Mask the zero entries
+    masked_target_prob = np.ma.masked_where(target_prob_heat_map == 0, target_prob_heat_map)
+
+    # Modify 'Reds' to avoid starting at white
+    reds = plt.cm.get_cmap('Reds', 256)
+    new_colors = reds(np.linspace(0.2, 1, 256))  # Start at 0.2 to avoid white
+    custom_cmap = mcolors.ListedColormap(new_colors)
+    custom_cmap.set_bad(color='white')  # Keep masked values white
+
+    # Compute maximum probability value in the masked target probability map
+    max_prob_value = np.max(masked_target_prob)
+    min_prob_value = 0
+
+    # Add a colorbar for the probability scale
+    img = ax1.imshow(masked_target_prob, cmap=custom_cmap, interpolation='nearest', vmin=min_prob_value, vmax=max_prob_value)
+    ax1.set_title('Target Probability Map')
+    ax1.axis('off')
+    cbar = fig.colorbar(img, ax=ax1)
+    cbar.set_label('Probability')
+
+    plt.tight_layout()
+    plt.show()
 
 # -----------------------------
 # Belief Map Functions
@@ -560,6 +638,34 @@ def check_target_probability_in_entropy_map(belief_map, grid_cells, target_class
     else:
         return False, None
 
+def compute_target_prob_map(belief_map, occ_grid_map, target_class_idx, free_color=(255, 255, 255)):
+    """
+    Computes the target probability map from the Dirichlet belief map.
+
+    Args:
+        belief_map (list of list of np.ndarray): Dirichlet belief map.
+        target_class_idx (int): Index of the target class in the Dirichlet distribution.
+
+    Returns:
+        np.ndarray: 2D array representing the target probability map.
+    """
+    height = len(belief_map)
+    width = len(belief_map[0])
+    target_prob_map = np.zeros((height, width))
+
+    for y in range(height):
+        for x in range(width):
+            if tuple(occ_grid_map[y][x]) == free_color:
+                target_prob_map[y][x] = 0.0  # Free cell
+            elif belief_map[y][x] is not None:
+                alphas = belief_map[y][x]
+                alphas = np.clip(alphas, 1e-6, None)  # Avoid division by zero
+                prob = alphas[target_class_idx] / np.sum(alphas)
+                target_prob_map[y][x] = prob
+            else:
+                target_prob_map[y][x] = 0.0
+
+    return target_prob_map
 
 # -----------------------------
 # Sensor Functions
